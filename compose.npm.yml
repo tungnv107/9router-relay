@@ -1,0 +1,12 @@
+services:
+  router:
+    networks:
+      default:
+      npm:
+        aliases:
+          - 9router-relay
+
+networks:
+  npm:
+    external: true
+    name: ${NPM_NETWORK:-npm_proxy}

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "mode": "enforce",
+  "killSwitch": "none",
+  "cache": {
+    "enabled": true,
+    "requireOptIn": true,
+    "ttlMs": 300000,
+    "maxEntries": 128,
+    "maxBytes": 16777216,
+    "maxEntryBytes": 2097152,
+    "maxRequestBytes": 2097152
+  },
+  "promptCache": { "enabled": false, "models": [] },
+  "context": { "deduplicateTools": true, "maxToolOutputChars": 0 },
+  "reasoning": { "models": {} },
+  "audit": { "enabled": false, "maxBytes": 2097152 }
+}

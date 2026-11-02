@@ -1,0 +1,10 @@
+{
+  "source": "D:/wsl/ch-relay-local/policy",
+  "importedAt": "2026-11-02",
+  "sourceHashes": {
+    "config.mjs": "51a9be2679f69f81229d6a57ccd837dbfbe88f7477fd647d4c73761788a26f9c",
+    "engine.mjs": "8255f63b9c90c21805f326c8ee8b82b13d9e3460ed2175578c78b24cf70a6966",
+    "optimizer.mjs": "1cd5072e2cb3fd8ba86a8845d48b4f71ec6440c78f7a2070a865488cf35ab76e",
+    "replay.mjs": "788c75f7a673fe3d8651b8fc2a04194548e24580687883657abb9bf30c1f7605"
+  }
+}

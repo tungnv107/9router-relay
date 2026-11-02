@@ -1,0 +1,97 @@
+{
+  "startedAt": "2026-11-02T08:00:16.023Z",
+  "syntheticPromptsOnly": true,
+  "productionModified": false,
+  "checks": [
+    {
+      "name": "provider-create-discovery-probe",
+      "passed": true,
+      "inferenceCalls": 0
+    },
+    {
+      "name": "json-warm-up",
+      "status": 200,
+      "cache": "miss",
+      "relayCalls": 1,
+      "latencyMs": 62,
+      "marker": true,
+      "usage": {
+        "prompt_tokens": 20,
+        "completion_tokens": 10,
+        "total_tokens": 30
+      }
+    },
+    {
+      "name": "json-local-replay",
+      "status": 200,
+      "cache": "hit",
+      "relayCalls": 0,
+      "latencyMs": 11,
+      "marker": true,
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      }
+    },
+    {
+      "name": "scope-caller-provider-isolation",
+      "passed": true
+    },
+    {
+      "name": "sse-warm-up",
+      "status": 200,
+      "cache": "miss",
+      "relayCalls": 1,
+      "latencyMs": 20,
+      "marker": true,
+      "usage": null
+    },
+    {
+      "name": "sse-local-replay",
+      "status": 200,
+      "cache": "hit",
+      "relayCalls": 0,
+      "latencyMs": 8,
+      "marker": true,
+      "usage": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      }
+    },
+    {
+      "name": "responses-native-stream",
+      "status": 200,
+      "cache": "bypass",
+      "relayCalls": 1,
+      "latencyMs": 21,
+      "marker": true,
+      "usage": null
+    },
+    {
+      "name": "provider-ui-add-form",
+      "passed": true
+    },
+    {
+      "name": "provider-ui-edit-preserves-url",
+      "passed": true
+    }
+  ],
+  "result": "PASS",
+  "sensitiveTestStateRemoved": true,
+  "finishedAt": "2026-11-02T08:00:19.880Z",
+  "totalRelayInferenceCalls": 3
+}

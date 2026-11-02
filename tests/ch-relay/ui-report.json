@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-11-02T07:59:05.208Z",
+  "syntheticPromptsOnly": true,
+  "productionModified": false,
+  "checks": [
+    {
+      "name": "provider-create-discovery-probe",
+      "passed": true,
+      "inferenceCalls": 0
+    },
+    {
+      "name": "provider-ui-add-form",
+      "passed": true
+    },
+    {
+      "name": "provider-ui-edit-preserves-url",
+      "passed": true
+    }
+  ],
+  "result": "PASS",
+  "sensitiveTestStateRemoved": true,
+  "finishedAt": "2026-11-02T07:59:09.534Z",
+  "totalRelayInferenceCalls": 0
+}
