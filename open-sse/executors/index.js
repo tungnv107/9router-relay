@@ -7,7 +7,7 @@ import { IFlowExecutor } from "./iflow.js";
 import { QoderExecutor } from "./qoder.js";
 import { KiroExecutor } from "./kiro.js";
 import { KimchiExecutor } from "./kimchi.js";
-import { CodexExecutor } from "./codex.js";
+import { CodexRelayExecutor } from "./codex-relay.js";
 import { ChRelayExecutor } from "./ch-relay.js";
 import { CursorExecutor } from "./cursor.js";
 import { VertexExecutor } from "./vertex.js";
@@ -47,7 +47,7 @@ const executors = {
   "qoder-cn": new QoderExecutor("qoder-cn"),
   kiro: new KiroExecutor(),
   kimchi: new KimchiExecutor(),
-  codex: new CodexExecutor(),
+  codex: new CodexRelayExecutor(),
   "ch-relay": new ChRelayExecutor(),
   cursor: new CursorExecutor(),
   cu: new CursorExecutor(), // Alias for cursor

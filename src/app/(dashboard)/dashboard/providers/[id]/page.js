@@ -1445,6 +1445,16 @@ export default function ProviderDetailPage() {
         </div>
       )}
 
+      {providerId === "codex" && (
+        <div className="flex items-start gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2">
+          <span className="material-symbols-outlined text-[16px] text-blue-500 shrink-0">route</span>
+          <p className="text-xs leading-relaxed text-blue-600 dark:text-blue-400">
+            Chat and Responses requests automatically use the server&apos;s ch-relay with these OpenAI Codex connections.
+            Keep using cx/ models. No separate ch-relay connection or API key is needed.
+          </p>
+        </div>
+      )}
+
       {providerInfo.notice?.text && !providerInfo.deprecated && (
         <div className="flex flex-col gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 sm:flex-row sm:items-center">
           <span className="material-symbols-outlined text-[16px] text-blue-500 shrink-0">info</span>

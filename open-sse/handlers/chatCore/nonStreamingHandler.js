@@ -6,6 +6,7 @@ import { addBufferToUsage, filterUsageForFormat } from "../../utils/usageTrackin
 import { createErrorResult } from "../../utils/error.js";
 import { upstreamResponseHeaders } from "../../utils/upstreamHeaders.js";
 import { HTTP_STATUS } from "../../config/runtimeConfig.js";
+import { usesChRelay } from "../../config/chRelay.js";
 import { parseSSEToOpenAIResponse } from "./sseToJsonHandler.js";
 import { unwrapClineEnvelope } from "../../shared/clineEnvelope.js";
 import { buildRequestDetail, extractRequestConfig, extractUsageFromResponse, saveUsageStats, formatDoneLine } from "./requestDetail.js";
@@ -320,7 +321,7 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
   }
 
   if (translatedResponse?.usage) {
-    translatedResponse.usage = filterUsageForFormat(provider === "ch-relay" ? translatedResponse.usage : addBufferToUsage(translatedResponse.usage), sourceFormat);
+    translatedResponse.usage = filterUsageForFormat(usesChRelay(provider) ? translatedResponse.usage : addBufferToUsage(translatedResponse.usage), sourceFormat);
   }
 
   // Strip reasoning_content only when content is non-empty.

@@ -38,6 +38,19 @@ export function chRelayFetch(url, init = {}) {
   return directFetch(target, { ...init, dispatcher, redirect: "error" });
 }
 
+export function codexRelayCredentials(credentials) {
+  return {
+    ...credentials,
+    apiKey: undefined,
+    accessToken: credentials?.accessToken || credentials?.apiKey,
+    providerSpecificData: {
+      ...credentials?.providerSpecificData,
+      // Codex accounts inherit the server's relay, never an account's upstream URL.
+      baseUrl: resolveChRelayBaseUrl(),
+    },
+  };
+}
+
 export function chRelayHeaders(credentials, stream = false) {
   const token = credentials?.apiKey || credentials?.accessToken;
   if (!token || /\s/.test(token)) throw new Error("A ch-relay share key or ChatGPT access token is required");
@@ -46,7 +59,8 @@ export function chRelayHeaders(credentials, stream = false) {
     accept: stream ? "text/event-stream" : "application/json",
     authorization: `Bearer ${token}`,
   });
-  const accountId = credentials?.providerSpecificData?.chatgptAccountId;
+  const accountId = credentials?.providerSpecificData?.workspaceId ||
+    credentials?.providerSpecificData?.chatgptAccountId || credentials?.providerSpecificData?.accountId;
   if (accountId) headers.set("chatgpt-account-id", accountId);
   return headers;
 }

@@ -14,7 +14,7 @@ export class ChRelayExecutor extends BaseExecutor {
     this.policy = policy;
   }
 
-  async execute({ model, body, stream, credentials, signal, proxyOptions }) {
+  async execute({ model, body, stream, credentials, signal, proxyOptions, requestHeaders }) {
     if (proxyOptions?.strictProxy || proxyOptions?.connectionProxyEnabled || proxyOptions?.vercelRelayUrl) {
       throw new Error("ch-relay connects directly to its approved origin; remove this connection's outbound proxy setting");
     }
@@ -23,7 +23,9 @@ export class ChRelayExecutor extends BaseExecutor {
     const compact = body._compact === true && format === "openai-responses";
     const endpoint = compact ? "/v1/responses/compact" : format === "openai-responses" ? "/v1/responses" : "/v1/chat/completions";
     const url = `${base}${endpoint.slice(3)}`;
-    const headers = chRelayHeaders(credentials, stream);
+    const headers = new Headers(requestHeaders || {});
+    // Connection credentials always win over caller/custom headers.
+    for (const [name, value] of chRelayHeaders(credentials, stream)) headers.set(name, value);
     const rawHeaders = new Headers(credentials?.rawHeaders || {});
     for (const name of [...CONTROL_HEADERS, ...SESSION_HEADERS]) {
       if (rawHeaders.has(name)) headers.set(name, rawHeaders.get(name));
@@ -72,6 +74,6 @@ export class ChRelayExecutor extends BaseExecutor {
         async cancel(reason) { clearInterval(monitor); await reader.cancel(reason); },
       }), { status: response.status, headers: response.headers });
     } else clearInterval(monitor);
-    return { response, url, headers: Object.fromEntries(chRelayHeaders(credentials, stream)), transformedBody, responseFormat: format };
+    return { response, url, headers: Object.fromEntries(headers), transformedBody, responseFormat: format };
   }
 }

@@ -294,7 +294,7 @@ export class CodexExecutor extends BaseExecutor {
     const { attempts, delayMs } = resolveRetryEntry(retryConfig[503]);
     let attempt = 0;
     while (true) {
-      const result = await super.execute(args);
+      const result = await this.executeRequest(args);
       const peek = await this._peekSseTransientError(result.response);
       if (!peek.matched) {
         // Replace body with re-assembled stream (prefix bytes already read + rest)
@@ -322,6 +322,11 @@ export class CodexExecutor extends BaseExecutor {
       dbg("CODEX", `SSE overloaded "${peek.matched}" → retry ${attempt}/${attempts} in ${delayMs}ms`);
       await new Promise(r => setTimeout(r, delayMs));
     }
+  }
+
+  // Transport hook keeps Codex normalization, OAuth refresh and SSE error handling reusable.
+  executeRequest(args) {
+    return super.execute(args);
   }
 
   // Peek first N bytes of SSE body to detect upstream transient errors.

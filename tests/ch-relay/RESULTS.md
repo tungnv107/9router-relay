@@ -4,6 +4,15 @@ Mã gốc: 9router `v0.5.112`, commit `1fe586bb1cf35e1ed0cb2150a8ef7d1db040b21d`
 
 ## Kiểm chứng bản cuối
 
+### Codex tự dùng ch-relay — 02/11/2026, 16:19 UTC+7
+
+- 184 kiểm thử PASS: 62 policy và 122 kiểm thử provider/HTTP/chatCore/Codex, bao gồm 23 ca mới cho transport tự động và pipeline Codex.
+- `npm run build:local`: PASS, 151 static pages và standalone assets.
+- `node tests/ch-relay/codex-live.mjs --ui`: PASS trên production build riêng với backend HTTP giả. Chỉ tạo một connection Codex, không có connection ch-relay hay Base URL trên account. Chat JSON, Responses SSE, compact và thông báo giao diện đều đạt.
+- `node tests/ch-relay/codex-live.mjs --live`: PASS với ch-relay local thật. Hai prompt ngắn qua `cx/gpt-6-luna` và `codex/gpt-6-luna` trả HTTP 200 và marker đúng; mỗi lượt ghi nhận một request 9router → relay. Local-only bị chặn 412 với 0 request tới relay.
+- Token không được in ra; profile/database kiểm thử đã xóa sau khi dừng ứng dụng. Không đổi database production, không push/deploy. Report JSON và ảnh UI nằm trong `.scratch/codex-relay-*-report.json` và `.scratch/codex-auto-relay-ui.png`.
+- Kiểm chứng live xác nhận đường đi tới relay; không đo số request nội bộ relay → OpenAI hoặc mức tiết kiệm quota. OAuth refresh được kiểm tra bằng mock token rotation, không refresh tài khoản thật.
+
 ### Bổ sung Docker / Oracle ARM64 — 02/11/2026
 
 - Docker build Node 24.18.0 + Next 16.4.3: PASS trên Ubuntu ARM64; ch-relay chạy Bun 1.4.2 với bundle local được đóng gói riêng.

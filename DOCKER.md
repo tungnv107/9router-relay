@@ -4,7 +4,7 @@ Stack chạy độc lập trên Linux amd64/arm64, không cần proxy Windows ch
 
 ```text
 Client → Nginx Proxy Manager → 9router-relay:20128
-                              └─ provider chr → ch-relay:11500 → OpenAI
+                              └─ OpenAI Codex (cx) / chr → ch-relay:11500 → OpenAI
 ```
 
 Cache/optimizer nằm trong 9router. Backend ch-relay chạy ở service riêng trong cùng Docker Compose. Volume riêng giữ cấu hình/tài khoản sau khi restart hoặc rebuild. Backend vẫn cần tài khoản ChatGPT hợp lệ; cài phần mềm không tự tạo tài khoản/quota.
@@ -39,7 +39,9 @@ curl --fail http://127.0.0.1:20128/api/health
 
 Mặc định bind trên server: 9router `127.0.0.1:20128`, admin ch-relay `127.0.0.1:11504`. Inference 11500 chỉ có trong mạng Docker, không publish ra Internet. `ROUTER_PORT`, `ROUTER_BIND_IP`, `CH_RELAY_ADMIN_PORT` có thể đổi trong `.env`.
 
-9router → Providers → **ch-relay Local** → Add: để Base URL trống (dùng `CH_RELAY_BASE_URL=http://ch-relay:11500/v1` trong Compose), nhập ChatGPT access token hoặc share key của backend. Account ID chỉ điền nếu tài khoản yêu cầu. Dùng model `chr/<model-id>` từ danh sách model live. Phép Check đọc catalog, chưa chứng minh đăng nhập/inference thành công.
+9router → Providers → **OpenAI Codex** → Add rồi đăng nhập/import tài khoản. Các connection Codex hiện có tự dùng ch-relay của Compose cho chat/Responses/compact. Tiếp tục dùng model `cx/<model-id>`; không cần tạo connection ch-relay, nhập lại token hoặc cấu hình Base URL ở UI. 9router tự lấy access token và Account ID, giữ cơ chế refresh token. Nếu relay lỗi, inference không tự bỏ qua relay.
+
+**ch-relay Local** là tùy chọn nâng cao khi muốn dùng share key hoặc backend riêng với `chr/<model-id>`. Để Base URL trống sẽ dùng relay của server. Phép Check ở provider này chỉ đọc catalog, chưa chứng minh đăng nhập/inference thành công.
 
 Không chuyển account Windows tự động. Có thể đăng nhập/quản lý account trong admin ch-relay qua SSH tunnel:
 

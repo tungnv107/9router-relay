@@ -20,6 +20,7 @@ import { handleComboChat, handleFusionChat, detectRequiredCapabilities } from "o
 import { augmentModelsWithCapacityAdapter, withCapacityAdapterStripping, getActiveAdapterStrategy } from "open-sse/services/capacityAdapter.js";
 import { handleBypassRequest } from "open-sse/utils/bypassHandler.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
+import { usesChRelay } from "open-sse/config/chRelay.js";
 import { detectFormatByEndpoint } from "open-sse/translator/formats.js";
 import { resolveSessionIdentity } from "open-sse/utils/sessionManager.js";
 import * as log from "../utils/logger.js";
@@ -100,8 +101,8 @@ export async function handleChat(request, clientRawRequest = null) {
   if (keyAccessDenied) return keyAccessDenied;
 
   // local-only must never escape through a combo/capacity fallback to another provider.
-  if (request.headers.get("x-relay-local-only") === "1" && !/^(ch-relay|chr)\//.test(modelStr)) {
-    return Response.json({ error: { message: "Local-only requires an explicit ch-relay/<model> or chr/<model> target" } },
+  if (request.headers.get("x-relay-local-only") === "1" && !/^(ch-relay|chr|codex|cx)\//.test(modelStr)) {
+    return Response.json({ error: { message: "Local-only requires an explicit cx/<model>, codex/<model>, chr/<model> or ch-relay/<model> target" } },
       { status: 412, headers: { "x-relay-upstream-requests": "0", "cache-control": "no-store" } });
   }
 
@@ -365,7 +366,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
 
     if (result.success) return result.response;
     // Local policy denials are not provider outages and must not lock/rotate a healthy account.
-    if (provider === "ch-relay" && result.response?.headers.get("x-relay-upstream-requests") === "0") return result.response;
+    if (usesChRelay(provider) && result.response?.headers.get("x-relay-upstream-requests") === "0") return result.response;
 
     // Antigravity 409/429: refresh live quota to get exact resetAt before locking
     let quotaResetMs = null;

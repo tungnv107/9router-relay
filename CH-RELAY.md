@@ -3,7 +3,7 @@
 Tích hợp từ 9router `v0.5.112`, commit `1fe586bb1cf35e1ed0cb2150a8ef7d1db040b21d` của [decolua/9router](https://github.com/decolua/9router), và bốn module policy trong `D:\wsl\ch-relay-local\policy`. Provider và cache được tích hợp vào 9router. Bản Docker chạy kèm backend ch-relay trên cùng server, độc lập với Windows; xem [DOCKER.md](DOCKER.md). Bundle backend được đóng gói riêng, không commit vào Git.
 
 ```text
-Client → 9router /v1 → provider ch-relay → cache/optimizer trong 9router
+Client → 9router /v1 → OpenAI Codex (cx/...) → cache/optimizer trong 9router
                                            ├─ hit: trả kết quả, không gọi relay
                                            └─ miss: http://127.0.0.1:11500/v1 → ch-relay → upstream
 ```
@@ -11,9 +11,13 @@ Client → 9router /v1 → provider ch-relay → cache/optimizer trong 9router
 ## Kết nối
 
 1. Chạy proxy ch-relay hiện có. Inference mặc định là `http://127.0.0.1:11500/v1`; cổng admin `11504` không dùng để inference.
-2. Trong 9router, mở **Providers → ch-relay Local → Add**.
-3. Nhập tên connection; Base URL mặc định ở trên; API Key là **share key của relay hoặc access token ChatGPT còn hạn**, không phải API key của 9router. Điền ChatGPT Account ID nếu tài khoản yêu cầu. Check/Fetch Models kiểm tra `/models`; inference là phép kiểm tra xác thực cuối cùng. Access token nhập tay không tự refresh; ưu tiên share key nếu instance của bạn đã có cơ chế quản lý tài khoản.
-4. Client tiếp tục gọi endpoint 9router, chọn `chr/gpt-6-luna` hoặc `ch-relay/gpt-6-luna`. Trang provider tự tải danh sách model từ connection đang bật. Model seed chỉ là gợi ý khi chưa tải được catalog, không cam kết quyền truy cập tài khoản.
+2. Trong 9router, mở **Providers → OpenAI Codex → Add** rồi đăng nhập/import tài khoản. Connection Codex đã có cũng tự áp dụng, không cần thêm lại.
+3. Client tiếp tục gọi endpoint 9router và dùng `cx/<model>` hoặc `codex/<model>` như trước. Chat, Responses và compact tự đi qua ch-relay của server; access token và Account ID lấy từ connection được chọn. 9router tiếp tục quản lý refresh token, priority và xoay tài khoản.
+4. Không cần tạo connection ch-relay riêng, sao chép token hay điền lại Base URL. Nếu relay lỗi, request báo lỗi; không tự chuyển sang gọi inference trực tiếp.
+
+**Kết nối thủ công (tùy chọn):** **Providers → ch-relay Local → Add** chỉ dành cho share key/backend riêng. Để Base URL trống để dùng relay của server; nhập share key hoặc access token ChatGPT còn hạn, Account ID nếu cần, rồi dùng `chr/<model>` hoặc `ch-relay/<model>`. Check/Fetch Models kiểm tra kết nối `/models`, không chứng minh xác thực inference; access token nhập tay không tự refresh.
+
+Tự định tuyến áp dụng cho chat/Responses/compact. Đăng nhập, refresh OAuth, kiểm tra tài khoản/quota và các endpoint image/STT riêng vẫn dùng luồng Codex hiện có.
 
 Provider hỗ trợ Chat Completions và Responses. Khi client dùng hai định dạng này, request giữ reasoning, encrypted state, prompt cache key, tool-call ID và history qua 9router. Client định dạng khác dùng translator sẵn có của 9router.
 
@@ -53,7 +57,7 @@ Invoke-WebRequest 'http://127.0.0.1:20127/v1/chat/completions' -Method Post -Hea
 
 Header kết quả: `X-Relay-Cache: miss|hit|bypass|would-hit`, `X-Relay-Policy-Mode`, `X-Relay-Policy-Revision`. Hit thêm `X-Relay-Upstream-Requests: 0`, `X-Relay-Billable-Tokens: 0`, `X-Relay-Usage-Source: local-cache`. Miss giữ nguyên usage relay trả về; 9router không cộng buffer 2.000 token hay ước lượng bù usage cho provider này. Usage của relay chưa phải số liệu hóa đơn/percentage quota được xác minh trực tiếp từ upstream.
 
-`X-Relay-Local-Only: 1` chỉ chấp nhận model có prefix `chr/` hoặc `ch-relay/`, không chấp nhận combo/alias tổng quát để tránh fallback ra provider khác. Miss trả 412; kill=block trả 503. Không làm khóa hoặc xoay account khi bị policy chặn tại local.
+`X-Relay-Local-Only: 1` chỉ chấp nhận model có prefix `cx/`, `codex/`, `chr/` hoặc `ch-relay/`, không chấp nhận combo/alias tổng quát để tránh fallback ra provider khác. Miss trả 412; kill=block trả 503. Không làm khóa hoặc xoay account khi bị policy chặn tại local.
 
 Request có tools, tool history, encrypted reasoning, ảnh/audio, previous_response_id, conversation, store=true, background hoặc trường chưa biết sẽ không cache câu trả lời. Không cache lỗi, refusal, stream bị ngắt hoặc response chưa hoàn tất. Hai cold miss đồng thời vẫn có thể gọi upstream hai lần. Các phiên coding dùng tools thường không có response-cache hit; không có cam kết miễn token hay tăng quota tài khoản.
 
@@ -75,7 +79,7 @@ File được đọc lại trước mỗi request và mỗi 100 ms khi đang x�
 - `X-9Router-Token-Saver: off` bỏ cache/optimizer mới cho request đó, vẫn tôn trọng local-only và kill switch.
 - `Cache-Control: no-store` hoặc `X-Relay-Cache: bypass` bỏ response cache. Module tích hợp không ghi audit chứa prompt/credential ra đĩa.
 
-Quay lại cấu hình cũ bằng cách thay file JSON đã backup; bỏ provider khỏi client hoặc chọn provider cũ để ngừng dùng ch-relay. Không có thay đổi binary, database, cấu hình Codex hoặc autostart của proxy đang chạy.
+Quay lại policy cũ bằng cách thay file JSON đã backup. Bản fork này luôn định tuyến chat Codex qua relay; muốn khôi phục đường inference trực tiếp cần rollback mã nguồn. Không có thay đổi binary, database, cấu hình Codex hoặc autostart của proxy đang chạy.
 
 ## Kiểm chứng và chạy từ source
 
@@ -87,6 +91,14 @@ npm run test:ch-relay
 npm run build:local
 npm start
 ```
+
+Kiểm tra bản build với chỉ một connection Codex, gồm HTTP và giao diện:
+
+```powershell
+node tests/ch-relay/codex-live.mjs --ui
+```
+
+Để kiểm tra hai prompt ngắn qua ch-relay thật đang chạy và access token ChatGPT local hiện có, chạy `node tests/ch-relay/codex-live.mjs --live`. Script dùng profile riêng rồi xóa sau khi dừng, không sửa tài khoản production; không tự refresh token. Report ở `.scratch/codex-relay-live-report.json`.
 
 `npm start` mặc định cổng 20127. Để dùng dữ liệu riêng cho checkout này, đặt `DATA_DIR=D:\Projects\9RouterRelay\data` trước khi start. Không dùng chung DATA_DIR với instance 9router khác đang chạy.
 
