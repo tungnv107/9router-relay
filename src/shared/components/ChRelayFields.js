@@ -11,7 +11,7 @@ export default function ChRelayFields({ value, onChange }) {
       <Input label="ChatGPT Account ID (optional)" value={value.chatgptAccountId || ""}
         onChange={(event) => onChange({ ...value, chatgptAccountId: event.target.value })} />
       <p className="text-xs text-text-muted">
-        Use the inference port of your running local proxy. Enter its share key or a valid ChatGPT access token below.
+        Leave Base URL blank to use the server&apos;s configured ch-relay backend. Enter its share key or a valid ChatGPT access token below.
         Check verifies model discovery; authentication is verified on inference. Exact response caching requires
         X-Relay-Cache: allow and X-Relay-Cache-Scope. Tools and conversation state bypass response caching.
       </p>

@@ -1,0 +1,42 @@
+{
+  "startedAt": "2026-11-02T08:49:30.823Z",
+  "realAccountUsed": false,
+  "checks": [
+    {
+      "name": "health-and-auth-guards",
+      "passed": true
+    },
+    {
+      "name": "dashboard-login",
+      "passed": true
+    },
+    {
+      "name": "router-to-real-relay-private-network",
+      "passed": true,
+      "relayStatus": 401,
+      "reason": "No account configured"
+    },
+    {
+      "name": "json-cold-request",
+      "passed": true,
+      "fixtureCalls": 1
+    },
+    {
+      "name": "json-cache-replay",
+      "passed": true,
+      "fixtureCalls": 0
+    },
+    {
+      "name": "sse-cold-request",
+      "passed": true,
+      "fixtureCalls": 1
+    },
+    {
+      "name": "sse-cache-replay",
+      "passed": true,
+      "fixtureCalls": 0
+    }
+  ],
+  "temporaryProviderAndKeyRemoved": true,
+  "finishedAt": "2026-11-02T08:49:31.531Z"
+}

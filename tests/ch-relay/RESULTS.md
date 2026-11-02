@@ -4,6 +4,19 @@ Mã gốc: 9router `v0.5.112`, commit `1fe586bb1cf35e1ed0cb2150a8ef7d1db040b21d`
 
 ## Kiểm chứng bản cuối
 
+### Bổ sung Docker / Oracle ARM64 — 02/11/2026
+
+- Docker build Node 24.18.0 + Next 16.4.3: PASS trên Ubuntu ARM64; ch-relay chạy Bun 1.4.2 với bundle local được đóng gói riêng.
+- 112 test ch-relay PASS (62 policy + 50 provider/HTTP/runtime/chatCore, gồm 10 ca allowlist Docker mới).
+- 60 test hồi quy usage/Responses/model routing/tool dedup và 4 test OAuth cấu hình qua môi trường PASS.
+- Docker HTTP: đăng nhập dashboard, bảo vệ API, 9router gọi ch-relay qua mạng riêng đều PASS. Backend chưa có tài khoản nên trả 401 đúng dự kiến.
+- JSON và SSE đi qua production container với backend fixture: mỗi cold request gọi fixture một lần; replay gọi 0 lần và usage bằng 0. Xem `docker-report.json`. Không dùng tài khoản thật cho lần kiểm chứng server này.
+- UI trên server qua Edge headless: mở provider, form Add Connection và Base URL mặc định của server PASS.
+- Tạo lại cả hai container: volume vẫn giữ dữ liệu, healthcheck healthy, Nginx Proxy Manager vẫn gọi được `/api/health`.
+- DNS tại thời điểm kiểm tra vẫn trỏ `9router.tungnv.com` đến `74.208.236.247`; chưa cấu hình Proxy Host/SSL trong NPM. Xem [hướng dẫn Docker/NPM](../../DOCKER.md).
+
+Các kết quả bên dưới là phép kiểm chứng Windows trước khi triển khai Docker.
+
 | Hạng mục | Kết quả |
 |---|---|
 | `npm run build:local` | PASS: compile, 151 static pages, standalone assets |

@@ -151,9 +151,9 @@ try {
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: /^edit\s*Edit$/i }).click();
     await page.getByText("ch-relay Base URL", { exact: true }).waitFor();
-    await page.waitForFunction(expected => document.querySelector('input[placeholder="http://127.0.0.1:11500/v1"]')?.value === expected,
+    await page.waitForFunction(expected => [...document.querySelectorAll('input')].some(input => input.value === expected),
       `http://127.0.0.1:${bridgePort}/v1`, { timeout: 5000 });
-    assert.equal(await page.getByPlaceholder("http://127.0.0.1:11500/v1").inputValue(), `http://127.0.0.1:${bridgePort}/v1`);
+    assert.equal(await page.getByPlaceholder("Leave blank to use the server's configured relay").inputValue(), `http://127.0.0.1:${bridgePort}/v1`);
     report.checks.push({ name: "provider-ui-edit-preserves-url", passed: true });
     delete report.uiButtons;
   }

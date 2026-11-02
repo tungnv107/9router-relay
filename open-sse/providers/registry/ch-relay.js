@@ -9,7 +9,7 @@ export default {
     color: "#0D9488",
     textIcon: "CH",
     notice: {
-      text: "Connect your local ch-relay proxy. Use its share key or a valid ChatGPT access token. Exact response caching is opt-in; tools and conversation state bypass it.",
+      text: "Connect to the server's ch-relay backend. Use its share key or a valid ChatGPT access token. Exact response caching is opt-in; tools and conversation state bypass it.",
     },
   },
   hasProviderSpecificData: true,

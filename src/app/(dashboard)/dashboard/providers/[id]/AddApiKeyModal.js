@@ -476,7 +476,7 @@ export default function AddApiKeyModal({ isOpen, provider, providerName, isCompa
         )}
 
         <p className="text-xs text-text-muted">
-          {isChRelay ? "ch-relay connects directly to your local proxy." : "Legacy manual proxy fields are still accepted by API for backward compatibility."}
+          {isChRelay ? "ch-relay connects directly to the configured backend." : "Legacy manual proxy fields are still accepted by API for backward compatibility."}
         </p>
 
         <div className="flex gap-2">
