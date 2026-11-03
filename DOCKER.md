@@ -53,6 +53,35 @@ Sau đó mở `http://localhost:20128` hoặc `http://localhost:11504` trên má
 
 Repo là snapshot từ upstream đã loại bỏ OAuth client credentials nhúng sẵn và lịch sử chứa chúng (GitHub Push Protection). Nếu dùng Gemini/Gemini CLI hoặc Antigravity OAuth, tự đặt `GOOGLE_OAUTH_CLIENT_ID/SECRET` hoặc `ANTIGRAVITY_OAUTH_CLIENT_ID/SECRET` trong `.env`. ch-relay không dùng các biến này.
 
+### Antigravity: Google báo thiếu `client_id`
+
+Lỗi `Missing required parameter: client_id` xảy ra khi URL đăng nhập không có OAuth client ID. Bản fork này không chứa client mặc định. Cấu hình đủ cặp client ID/secret hợp lệ dành cho Antigravity trong `.env` **trên server chạy router**, cùng thư mục với `docker-compose.yml`:
+
+```dotenv
+ANTIGRAVITY_OAUTH_CLIENT_ID=<client-id-cua-Antigravity>
+ANTIGRAVITY_OAUTH_CLIENT_SECRET=<client-secret-tuong-ung>
+```
+
+Thay các giá trị mẫu bằng cấu hình thật; đây là thông tin của ứng dụng OAuth, không phải email, mật khẩu Google hay access token. Không dùng cặp client của Gemini thay cho Antigravity. Với Gemini CLI, hai tên biến đầy đủ là `GOOGLE_OAUTH_CLIENT_ID` và `GOOGLE_OAUTH_CLIENT_SECRET`.
+
+Sau khi sửa `.env`, tạo lại riêng container router để nạp biến mới. Theo [tài liệu Docker](https://docs.docker.com/reference/cli/docker/compose/restart/), lệnh `docker compose restart` không cập nhật environment của container:
+
+```sh
+docker compose up -d --no-deps --force-recreate router
+# Nếu đang dùng Nginx Proxy Manager, giữ nguyên cả hai compose file:
+# docker compose -f docker-compose.yml -f compose.npm.yml up -d --no-deps --force-recreate router
+```
+
+Đây là bước nạp cấu hình vào image hiện có; thay đổi mã nguồn vẫn cần build theo mục cập nhật bên dưới. Bản sửa kiểm tra cả hai biến trước khi mở Google và trả lỗi ngay trong hộp thoại kết nối nếu thiếu cấu hình. Sau khi nạp đủ cấu hình, đóng hộp thoại cũ và chọn **Add Connection** lại để tạo URL mới. Không commit `.env` hoặc đưa secret vào URL đăng nhập.
+
+Nếu dùng OAuth client loại **Web application**, thêm callback dưới đây vào **Authorized redirect URIs** của client trong Google Cloud, rồi đặt cùng URL trong `.env`:
+
+```dotenv
+ANTIGRAVITY_OAUTH_REDIRECT_URI=https://9router.tungnv.com/api/auth/callback/google
+```
+
+Thay domain bằng domain của router đang dùng. Đường dẫn `/api/auth/callback/google` chuyển nội bộ tới trang xử lý `/callback`; cả bước đăng nhập lẫn đổi code lấy token dùng nguyên URL đã cấu hình. Google yêu cầu URL [khớp chính xác với redirect URI đã đăng ký](https://developers.google.com/identity/protocols/oauth2/web-server#redirect-uri-validation), không chỉ domain hay JavaScript origin. Với Gemini CLI, biến tương ứng là `GOOGLE_OAUTH_REDIRECT_URI`. Bỏ trống biến redirect để giữ luồng localhost của desktop client. Việc Google chấp nhận URL đăng nhập chưa xác nhận tài khoản/client có quyền gọi API Antigravity; cần hoàn tất consent và thử model để kiểm chứng.
+
 ## Nginx Proxy Manager
 
 Kết nối router vào mạng của NPM (server hiện tại là `npm_proxy`):

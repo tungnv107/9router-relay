@@ -1,9 +1,11 @@
 import { GEMINI_CONFIG, getOAuthClientMetadata } from "../constants/oauth.js";
+import { assertOAuthClientConfigured } from "open-sse/config/oauthClients.js";
 
 const geminiCli = {
   config: GEMINI_CONFIG,
   flowType: "authorization_code",
   buildAuthUrl: (config, redirectUri, state) => {
+    assertOAuthClientConfigured(config, "Gemini CLI", "GOOGLE_OAUTH");
     const params = new URLSearchParams({
       client_id: config.clientId,
       response_type: "code",
@@ -16,6 +18,7 @@ const geminiCli = {
     return `${config.authorizeUrl}?${params.toString()}`;
   },
   exchangeToken: async (config, code, redirectUri) => {
+    assertOAuthClientConfigured(config, "Gemini CLI", "GOOGLE_OAUTH");
     const response = await fetch(config.tokenUrl, {
       method: "POST",
       headers: {

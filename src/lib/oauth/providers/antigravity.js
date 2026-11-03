@@ -1,9 +1,11 @@
 import { ANTIGRAVITY_CONFIG, getOAuthClientMetadata } from "../constants/oauth.js";
+import { assertOAuthClientConfigured } from "open-sse/config/oauthClients.js";
 
 const antigravity = {
   config: ANTIGRAVITY_CONFIG,
   flowType: "authorization_code",
   buildAuthUrl: (config, redirectUri, state) => {
+    assertOAuthClientConfigured(config, "Antigravity", "ANTIGRAVITY_OAUTH");
     const params = new URLSearchParams({
       client_id: config.clientId,
       response_type: "code",
@@ -16,6 +18,7 @@ const antigravity = {
     return `${config.authorizeUrl}?${params.toString()}`;
   },
   exchangeToken: async (config, code, redirectUri) => {
+    assertOAuthClientConfigured(config, "Antigravity", "ANTIGRAVITY_OAUTH");
     const response = await fetch(config.tokenUrl, {
       method: "POST",
       headers: {

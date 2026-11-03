@@ -70,6 +70,18 @@ describe("dashboard guard public LLM API access", () => {
     expect(mocks.validateApiKey).not.toHaveBeenCalled();
   });
 
+  it("allows the Google callback page without a dashboard session", async () => {
+    const response = await proxy(request("/api/auth/callback/google", { host: "router.example.com" }));
+    expect(response).toBe(mocks.nextResponse);
+  });
+
+  it("keeps Google token exchange and unrelated callback routes protected", async () => {
+    for (const pathname of ["/api/oauth/antigravity/exchange", "/api/auth/callback/other"]) {
+      const response = await proxy(request(pathname, { host: "router.example.com" }));
+      expect(response.status).toBe(401);
+    }
+  });
+
   it("rejects remote Host-spoof when real peer IP is non-loopback", async () => {
     const response = await proxy(localRequest("/v1/chat/completions", {
       host: "localhost",

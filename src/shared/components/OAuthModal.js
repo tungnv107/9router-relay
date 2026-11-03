@@ -33,7 +33,7 @@ const PASTE_TOKEN_PROVIDERS = {
 /**
  * OAuth Modal Component
  * - Localhost: Auto callback via popup message
- * - Remote: Manual paste callback URL
+ * - Remote: Same-origin web callback, or manual paste for loopback callbacks
  */
 export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, onClose, oauthMeta, idcConfig }) {
   const [step, setStep] = useState("waiting"); // waiting | input | success | error
@@ -379,6 +379,11 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
       const res = await fetch(authorizeUrl.toString());
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      // A configured web OAuth client must use its registered callback for both
+      // authorization and token exchange, instead of the loopback default.
+      redirectUri = data.redirectUri || redirectUri;
+      const isSameOriginCallback = new URL(redirectUri).origin === window.location.origin;
+      setPlaceholderUrl(`${redirectUri}?code=...`);
 
       // Codex: start proxy with server-side session (auto-exchange) + fallback to channels
       let codexProxyActive = false;
@@ -456,12 +461,12 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
         if (!popupRef.current) {
           setStep("input");
         }
-      } else if (!isLocalhost || provider === "codex" || provider === "xai") {
+      } else if ((!isLocalhost && !isSameOriginCallback) || provider === "codex" || provider === "xai") {
         // Non-localhost or proxy failed: manual input mode
         setStep("input");
         window.open(data.authUrl, "_blank");
       } else {
-        // Localhost (non-Codex/xAI): Open popup and wait for message
+        // Same-origin callback: open a popup and wait for its message.
         setStep("waiting");
         popupRef.current = window.open(data.authUrl, "oauth_popup", "width=600,height=700");
         if (!popupRef.current) {
@@ -581,6 +586,7 @@ export default function OAuthModal({ isOpen, provider, providerInfo, onSuccess, 
     // Handler for callback data - only process once
     const handleCallback = async (data) => {
       if (callbackProcessedRef.current) return; // Already processed
+      if ((provider === "antigravity" || provider === "gemini-cli") && data?.state !== authData.state) return;
 
       const { code, token, state, error: callbackError, errorDescription } = data;
 

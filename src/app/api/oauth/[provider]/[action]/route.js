@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
+import { OAuthConfigurationError } from "open-sse/config/oauthClients.js";
 import {
   getProvider,
   generateAuthData,
@@ -308,7 +309,7 @@ export async function GET(request, { params }) {
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
     console.log("OAuth GET error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: error instanceof OAuthConfigurationError ? 503 : 500 });
   }
 }
 
@@ -628,6 +629,6 @@ export async function POST(request, { params }) {
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error) {
     console.log("OAuth POST error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: error instanceof OAuthConfigurationError ? 503 : 500 });
   }
 }

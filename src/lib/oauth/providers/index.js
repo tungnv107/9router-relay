@@ -99,6 +99,7 @@ export async function generateAuthData(providerName, redirectUri, meta) {
   const config = provider.prepareConfig
     ? await provider.prepareConfig(provider.config, meta || {})
     : provider.config;
+  redirectUri = config.redirectUriOverride || redirectUri;
   const { codeVerifier: pkceVerifier, codeChallenge, state: pkceState } = generatePKCE(provider.pkceVerifierBytes);
   // Trae uses loginTraceID (set by prepareConfig) as the callback matcher, not PKCE state.
   const state = config.loginTraceID || pkceState;
@@ -141,6 +142,7 @@ export async function exchangeTokens(providerName, code, redirectUri, codeVerifi
   const config = provider.prepareConfig
     ? await provider.prepareConfig(provider.config, meta || {})
     : provider.config;
+  redirectUri = config.redirectUriOverride || redirectUri;
 
   const tokens = await provider.exchangeToken(config, code, redirectUri, codeVerifier, state, meta || {});
 
