@@ -1,19 +1,25 @@
 import { createHmac } from 'node:crypto';
+import { ANTIGRAVITY_RELAY } from '../../../config/antigravityRelay.mjs';
+import { optimizeAntigravity } from './antigravity.mjs';
 
 export function optimize(original, headers, config, secret, endpoint) {
   const body = structuredClone(original), changes = [];
+  const budget = config.context.maxToolOutputChars;
+  const shorten = text => {
+    if (typeof text !== 'string' || text.length <= budget) return text;
+    const marker='\n[LOCAL POLICY: tool output truncated; request full output if needed]\n';
+    const count=Math.floor((budget-marker.length)/2);
+    changes.push('tool_output_truncated'); return text.slice(0,count)+marker+text.slice(-count);
+  };
+  if ([ANTIGRAVITY_RELAY.generatePath, ANTIGRAVITY_RELAY.streamPath].some(path => endpoint === ANTIGRAVITY_RELAY.prefix + path)) {
+    optimizeAntigravity(body, headers, config, changes, shorten);
+    return { body, changes };
+  }
   if (config.context.deduplicateTools && Array.isArray(body.tools)) {
     const seen = new Set();
     body.tools = body.tools.filter(tool => { const key=JSON.stringify(tool); if (seen.has(key)) { changes.push('duplicate_tool_removed'); return false; } seen.add(key); return true; });
   }
-  const budget = config.context.maxToolOutputChars;
   if (budget && headers.get('x-relay-context') === 'truncate-tool-output') {
-    const shorten = text => {
-      if (typeof text !== 'string' || text.length <= budget) return text;
-      const marker='\n[LOCAL POLICY: tool output truncated; request full output if needed]\n';
-      const count=Math.floor((budget-marker.length)/2);
-      changes.push('tool_output_truncated'); return text.slice(0,count)+marker+text.slice(-count);
-    };
     if (Array.isArray(body.input)) for (const item of body.input) if (item?.type === 'function_call_output') item.output=shorten(item.output);
     if (Array.isArray(body.messages)) for (const item of body.messages) if (item?.role === 'tool') item.content=shorten(item.content);
   }

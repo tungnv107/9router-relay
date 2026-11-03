@@ -24,6 +24,8 @@ export function antigravityRelayHeaders(credentials, original = {}) {
   headers.set("content-type", "application/json");
   const raw = new Headers(credentials?.rawHeaders || {});
   if (raw.has("x-relay-local-only")) headers.set("x-relay-local-only", raw.get("x-relay-local-only"));
+  if (raw.has("x-relay-context")) headers.set("x-relay-context", raw.get("x-relay-context"));
+  if (raw.get("x-9router-token-saver")?.toLowerCase() === "off") headers.set("x-relay-optimizer", "off");
   return headers;
 }
 
@@ -36,8 +38,8 @@ export async function fetchAntigravityRelay(url, options, { fetchImpl = chRelayF
   const request = new Request(target, {
     method: "POST", headers: options.headers, body: options.body, signal: options.signal,
   });
-  // The native Google endpoint bypasses OpenAI cache/optimizer transformations.
-  // Policy still enforces kill, cancellation and local-only before any network call.
+  // Apply native Google context optimization without OpenAI field conversion or
+  // response replay. Policy strips local controls before the network call.
   return handleChRelayRequest(request, async outgoing => fetchImpl(target.href, {
     method: "POST", headers: outgoing.headers, body: await outgoing.text(),
     signal: outgoing.signal, redirect: "error",

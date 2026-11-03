@@ -104,6 +104,44 @@ describe("Antigravity OAuth through ch-relay and a real HTTP Google fixture", ()
     expect(JSON.stringify(calls[0].body)).toContain("aW1hZ2U=");
   });
 
+  it.each(["enforce", "dry-run", "off"])("applies native context policy through real relay HTTP only in %s mode", async mode => {
+    const policy = new PolicyEngine({ readConfig: () => ({ ...chRelayDefaults, mode, context: { deduplicateTools: true, maxToolOutputChars: 256 } }) });
+    executor = new AntigravityRelayExecutor({ policy });
+    const request = args();
+    request.credentials.rawHeaders = { "x-relay-context": "truncate-tool-output" };
+    request.body.request.contents = [
+      { role: "model", parts: [{ functionCall: { id: "call_1", name: "read", args: {} }, thoughtSignature: "opaque-signature" }] },
+      { role: "user", parts: [{ functionResponse: { id: "call_1", name: "read", response: { result: "x".repeat(2000) } } }] },
+    ];
+    request.body.request.generationConfig = { thinkingConfig: { thinkingBudget: 8192 }, maxOutputTokens: 16384 };
+    const original = structuredClone(request);
+    await (await executor.execute(request)).response.text();
+    const wire = calls[0].body.request;
+    const parts = wire.contents.flatMap(content => content.parts);
+    const text = parts.find(part => part.functionResponse).functionResponse.response.result;
+    if (mode === "enforce") {
+      expect(text.length).toBeLessThanOrEqual(256);
+      expect(text).toContain("LOCAL POLICY");
+    } else expect(text).toBe("x".repeat(2000));
+    expect(parts.find(part => part.functionCall).thoughtSignature).toBe("opaque-signature");
+    expect(parts.find(part => part.functionResponse).functionResponse.id).toBe("call_1");
+    expect(wire.generationConfig).toEqual(request.body.request.generationConfig);
+    expect(calls[0].headers["x-relay-context"]).toBeUndefined();
+    expect(relayCalls).toHaveLength(1);
+    expect(calls).toHaveLength(1);
+    expect(request).toEqual(original);
+  });
+
+  it.each([false, true])("requires context opt-in and respects token-saver opt-out=%s", async optOut => {
+    executor = new AntigravityRelayExecutor({ policy: new PolicyEngine({ readConfig: () => ({ ...chRelayDefaults, context: { deduplicateTools: true, maxToolOutputChars: 256 } }) }) });
+    const request = args();
+    request.body.request.contents = [{ role: "user", parts: [{ functionResponse: { id: "c", name: "read", response: { result: "x".repeat(2000) } } }] }];
+    if (optOut) request.credentials.rawHeaders = { "x-relay-context": "truncate-tool-output", "x-9router-token-saver": "off" };
+    await (await executor.execute(request)).response.text();
+    expect(calls[0].body.request.contents[0].parts[0].functionResponse.response.result).toHaveLength(2000);
+    expect(Object.keys(calls[0].headers).some(name => name.startsWith("x-relay-"))).toBe(false);
+  });
+
   it.each([401, 403, 429])("returns Google HTTP %s and retry metadata unchanged", async code => {
     status = code;
     const result = await executor.execute(args());

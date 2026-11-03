@@ -2,6 +2,7 @@ import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { defaults, validateConfig, revisionOf } from './config.mjs';
 import { optimize } from './optimizer.mjs';
 import { inspectReplay, replayBytes } from './replay.mjs';
+import { antigravityRelayTarget } from '../../../config/antigravityRelay.mjs';
 
 const endpoints=new Set(['/v1/responses','/v1/chat/completions']);
 const hop=new Set(['connection','keep-alive','transfer-encoding','content-length','host','proxy-authorization','proxy-authenticate','upgrade','trailer','te']);
@@ -28,6 +29,9 @@ function authDeadline(headers, now) {
   } catch { return 0; }
 }
 function eligibility(body, headers, endpoint, config, now) {
+  // Native Google optimization is supported, but replaying a Google response
+  // (including signed thinking/tool state) is deliberately not a cache feature.
+  if (!endpoints.has(endpoint)) return 'native_response_cache_unsupported';
   if (!config.cache.enabled) return 'cache_disabled';
   if (headers.get('x-relay-cache')==='bypass' || /no-store|no-cache/i.test(headers.get('cache-control')??'')) return 'client_bypass';
   if (config.cache.requireOptIn && headers.get('x-relay-cache')!=='allow') return 'opt_in_required';
@@ -100,7 +104,7 @@ export class PolicyEngine {
       return new Response(stream,{status:response.status,headers});
     };
     if (request.signal.aborted) return deny('Request already cancelled',499);
-    if (config.mode==='off' || config.killSwitch==='bypass' || request.method!=='POST' || !endpoints.has(endpoint)) {
+    if (config.mode==='off' || config.killSwitch==='bypass' || request.method!=='POST' || (!endpoints.has(endpoint) && !antigravityRelayTarget(request.url))) {
       if (only) return deny('Local-only request cannot be handled by this policy mode or endpoint');
       event('bypass'); return passthrough(outgoing(request,request.body,request.signal));
     }

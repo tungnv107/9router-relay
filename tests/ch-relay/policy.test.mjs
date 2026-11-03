@@ -119,3 +119,51 @@ test('config validation, atomic update, rollback and emergency sentinel',()=>{
   const dir=fs.mkdtempSync(path.join(path.dirname(fileURLToPath(import.meta.url)),'control-test-')),filename=path.join(dir,'policy.json'),control=new FileControl(filename,{});
   try {control.write(defaults);control.write({...defaults,mode:'enforce'});assert.equal(control.read().mode,'enforce');control.rollback();assert.equal(control.read().mode,'dry-run');assert.throws(()=>control.write({...defaults,mode:'bad'}));fs.writeFileSync(filename,'{');assert.equal(control.read().killSwitch,'block');fs.writeFileSync(filename,JSON.stringify(defaults));fs.writeFileSync(path.join(dir,'KILL_SWITCH'),'block');assert.equal(control.read().killSwitch,'block');assert.throws(()=>validateConfig({...defaults,silentOption:true}));}finally{for(const name of fs.readdirSync(dir))fs.unlinkSync(path.join(dir,name));fs.rmdirSync(dir);}
 });
+
+test('Google optimization preserves signed state and never adds OpenAI fields or replays responses', async () => {
+  const tool={name:'read',parameters:{type:'object'}},text='x'.repeat(2000);
+  const b={model:'test-model',project:'project',requestId:'request-1',request:{sessionId:'session',tools:[{functionDeclarations:[tool,tool,{...tool,description:'distinct'}]}],generationConfig:{thinkingConfig:{thinkingBudget:8192},maxOutputTokens:16384},systemInstruction:{parts:[{text}]},contents:[
+    {role:'model',parts:[{functionCall:{id:'c',name:'read',args:{text}},thoughtSignature:'opaque'}]},
+    {role:'user',parts:[{functionResponse:{id:'c',name:'read',response:{result:text}}},{functionResponse:{id:'e',name:'read',response:{error:text}}},{inlineData:{mimeType:'image/png',data:text}}]}
+  ]}};
+  const original=structuredClone(b);
+  const config={context:{deduplicateTools:true,maxToolOutputChars:256},promptCache:{enabled:true,models:['test-model']},reasoning:{models:{'test-model':{supported:['low'],defaultEffort:'low'}}}};
+  for (const route of ['/v1/antigravity/v1internal:generateContent','/v1/antigravity/v1internal:streamGenerateContent?alt=sse']) {
+    const f=fixture('enforce',config), headers={'x-relay-context':'truncate-tool-output'};
+    const r=await f.run(b,headers,route);
+    const wire=JSON.parse(f.received[0].body);
+    assert.equal(wire.request.tools[0].functionDeclarations.length,2);
+    assert.ok(wire.request.contents[1].parts[0].functionResponse.response.result.length<=256);
+    assert.deepEqual(wire.request.contents[0],b.request.contents[0]);
+    assert.deepEqual(wire.request.contents[1].parts.slice(1),b.request.contents[1].parts.slice(1));
+    assert.deepEqual(wire.request.systemInstruction,b.request.systemInstruction);
+    assert.deepEqual(wire.request.generationConfig,b.request.generationConfig);
+    assert.equal(wire.prompt_cache_key,undefined);assert.equal(wire.reasoning,undefined);
+    assert.equal(r.headers.get('x-relay-cache'),'bypass');
+    assert.ok(f.events.at(-1).proposed_changes.includes('tool_output_truncated'));
+    assert.equal(f.events.at(-1).token_savings,null);
+    const local=await f.run(b,{...headers,'x-relay-local-only':'1'},route);
+    assert.equal(local.status,412);assert.equal(f.calls,1);assert.equal(f.engine.status().cacheEntries,0);
+    await f.run(b,headers,route);assert.equal(f.calls,2);
+    assert.deepEqual(b,original);
+  }
+});
+
+test('Google optimizer honors opt-out, dry-run, inspection limits and exact endpoint validation', async () => {
+  const route='/v1/antigravity/v1internal:generateContent';
+  const b={model:'test-model',request:{contents:[{parts:[{functionResponse:{name:'read',response:{result:'x'.repeat(2000)}}}]}]}};
+  const raw=JSON.stringify(b,null,2), config={context:{deduplicateTools:true,maxToolOutputChars:256}};
+  for(const mode of ['off','dry-run']) {
+    const f=fixture(mode,config);await f.run(raw,{'x-relay-context':'truncate-tool-output'},route);
+    assert.equal(f.received[0].body,raw);
+  }
+  for (const headers of [{},{'x-relay-context':'truncate-tool-output','x-relay-optimizer':'off'}]) {
+    const f=fixture('enforce',config);await f.run(raw,headers,route);assert.equal(f.received[0].body,raw);
+  }
+  const f=fixture('enforce',{...config,cache:{...defaults.cache,maxRequestBytes:512}});
+  await f.run(raw,{'x-relay-context':'truncate-tool-output'},route);assert.equal(f.received[0].body,raw);
+  const g=fixture('enforce',config);
+  for(const endpoint of [route+'?unexpected=1',route+'/unknown']) {
+    await g.run(raw,{'x-relay-context':'truncate-tool-output'},endpoint);assert.equal(g.received.at(-1).body,raw);
+  }
+});

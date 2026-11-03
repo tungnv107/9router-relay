@@ -1,8 +1,9 @@
 // RTK port: compress tool_result content in LLM request bodies
-// Applied in chatCore on the source-format body, before translateRequest.
+// Applied in chatCore before or after translation, depending on the provider.
 import { RAW_CAP, MIN_COMPRESS_SIZE } from "./constants.js";
 import { autoDetectFilter } from "./autodetect.js";
 import { safeApply } from "./applyFilter.js";
+import { collectGeminiToolOutputText } from "../utils/geminiToolOutput.js";
 
 // Compress tool_result content in-place. Returns stats or null if disabled/failed.
 export function compressMessages(body, enabled) {
@@ -12,6 +13,20 @@ export function compressMessages(body, enabled) {
   // Kiro format: conversationState.history + conversationState.currentMessage
   if (body.conversationState) {
     return compressKiroFormat(body, enabled);
+  }
+
+  if (Array.isArray(body.request?.contents) || Array.isArray(body.contents)) {
+    const stats = { bytesBefore: 0, bytesAfter: 0, hits: [] };
+    try {
+      const updates = collectGeminiToolOutputText(body).map(target => ({
+        ...target, compressed: compressText(target.text, stats, "gemini-tool-result"),
+      }));
+      for (const { object, key, compressed } of updates) object[key] = compressed;
+      return stats;
+    } catch (e) {
+      console.warn("[RTK] Gemini tool output compression error:", e.message);
+      return null;
+    }
   }
 
   // Support both OpenAI/Claude "messages" and OpenAI Responses "input"

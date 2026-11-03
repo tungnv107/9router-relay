@@ -77,6 +77,57 @@ describe("Antigravity relay through chatCore with Google OAuth refresh", () => {
     expect(state.executor.relayOptions.policy.active.size).toBe(0);
   });
 
+  it.each(["gemini-3.8-flash-high", "claude-sonnet-4-6"])("RTK reduces actual relay payload for %s and preserves opt-out", async model => {
+    const output = Array.from({ length: 80 }, (_, i) => `src/file.js:${i + 1}:matching source line with enough content to compress`).join("\n");
+    const wire = [];
+    for (const enabled of [false, true]) {
+      const body = { model: `ag/${model}`, stream: false, messages: [
+        { role: "user", content: "Read matches" },
+        { role: "assistant", content: null, tool_calls: [{ id: "call_1", type: "function", function: { name: "read", arguments: "{}" } }] },
+        { role: "tool", tool_call_id: "call_1", content: output },
+        { role: "user", content: "Summarize" },
+      ] };
+      const result = await call(false, { body, modelInfo: { provider: "antigravity", model }, rtkEnabled: true,
+        clientRawRequest: { endpoint: "/v1/chat/completions", body, headers: { "x-9router-token-saver": enabled ? "on" : "off" } },
+      });
+      expect(result.success).toBe(true);
+      await result.response.text();
+      wire.push(JSON.parse(state.fetch.mock.calls.at(-1)[1].body));
+    }
+    expect(state.fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(wire[1]).length).toBeLessThan(JSON.stringify(wire[0]).length * 0.6);
+    for (const payload of wire) {
+      const parts = payload.request.contents.flatMap(content => content.parts);
+      expect(parts.find(part => part.functionCall).functionCall.id).toBe("call_1");
+      expect(parts.find(part => part.functionResponse).functionResponse.id).toBe("call_1");
+    }
+    expect(wire[1].request.generationConfig).toEqual(wire[0].request.generationConfig);
+    console.log(`[Antigravity RTK fixture] ${model}: ${Buffer.byteLength(JSON.stringify(wire[0]))} -> ${Buffer.byteLength(JSON.stringify(wire[1]))} outbound bytes (not measured quota)`);
+  });
+
+  it.each([
+    ["gemini-3.8-flash-high", false], ["gemini-3.8-flash-high", true],
+    ["claude-sonnet-4-6", false], ["claude-sonnet-4-6", true],
+  ])("preserves Claude error output through translation, RTK and native context policy for %s (array=%s)", async (model, asArray) => {
+    state.executor = new AntigravityRelayExecutor({ fetchImpl: state.fetch, policy: new PolicyEngine({ readConfig: () => ({
+      ...chRelayDefaults, context: { deduplicateTools: true, maxToolOutputChars: 256 },
+    }) }) });
+    const output = Array.from({ length: 80 }, (_, i) => `src/file.js:${i + 1}:important error trace with enough content to compress`).join("\n");
+    const body = { model: `ag/${model}`, stream: false, max_tokens: 1024, messages: [
+      { role: "user", content: "Read" },
+      { role: "assistant", content: [{ type: "tool_use", id: "call_error", name: "read", input: {} }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "call_error", is_error: true, content: asArray ? [{ type: "text", text: output }] : output }] },
+    ] };
+    const result = await call(false, { body, modelInfo: { provider: "antigravity", model }, sourceFormatOverride: "claude", rtkEnabled: true,
+      clientRawRequest: { endpoint: "/v1/messages", body, headers: { "x-relay-context": "truncate-tool-output" } },
+    });
+    expect(result.success).toBe(true);
+    await result.response.text();
+    expect(state.fetch.mock.calls[0][1].body).toContain(JSON.stringify(output).slice(1, -1));
+    const parts = JSON.parse(state.fetch.mock.calls[0][1].body).request.contents.flatMap(content => content.parts);
+    expect(parts.find(part => part.functionResponse).functionResponse.response.result.error).toBe(output);
+  });
+
   it("preserves local policy denials for account rotation handling", async () => {
     state.executor = new AntigravityRelayExecutor({ fetchImpl: state.fetch, policy: new PolicyEngine({ readConfig: () => ({ ...chRelayDefaults, killSwitch: "block" }) }) });
     const result = await call();
