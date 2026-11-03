@@ -47,15 +47,29 @@ if (!manifest) throw new Error("Embedded HTML manifest changed");
 source = source.replace(manifest[0], '  Ni = () => new Response(Bun.file(new URL("./assets/index-8p0jyy0b.html", import.meta.url)), { headers: { "content-type": "text/html; charset=utf-8" } });');
 if (source.includes("B:/~BUN/root/")) throw new Error("Unmapped executable asset remains");
 
-// Preserve the backend's auth/routing/network policy. Adapt only listening addresses and static assets.
+// Copy the reviewed native Google adapter alongside the private backend. Keep
+// relative imports intact so this package does not need the 9router source tree.
+for (const relative of ["config/antigravityRelay.mjs", "services/chRelay/googleGateway.mjs"]) {
+  const contents = fs.readFileSync(path.join(root, "open-sse", relative));
+  fs.mkdirSync(path.dirname(path.join(output, relative)), { recursive: true });
+  fs.writeFileSync(path.join(output, relative), contents);
+  assetHashes[relative] = hash(contents);
+}
+const networkPolicy = 'return { enforced: true, allowedOrigins: ["https://chatgpt.com", "https://auth.openai.com"], redirects: "error", environmentProxy: false, vendorServices: false };';
+if (!source.includes(networkPolicy)) throw new Error("Backend network policy metadata changed");
+source = source.replace(networkPolicy, networkPolicy.replace("return {", "return __relayNetworkPolicy({").replace("};", "});"));
+
+// Existing OpenAI routes keep their original auth and outbound restrictions.
 const bootstrap = `
 import { readFileSync as __relayReadFile } from "node:fs";
+import { withAntigravityRoutes as __relayGoogleRoutes, withAntigravityNetworkPolicy as __relayNetworkPolicy } from "./services/chRelay/googleGateway.mjs";
 const __relayReadAsset = name => __relayReadFile(new URL("./assets/" + name, import.meta.url), "utf8");
 const __relayServe = Bun.serve.bind(Bun);
 const __relayPorts = new Set([process.env.CH_PORT, process.env.CH_SHARE_PORT, process.env.CH_ADMIN_PORT].map(Number).filter(n => n > 0));
 Bun.serve = options => {
   if (__relayPorts.has(Number(options.port))) {
-    options = { ...options, hostname: "0.0.0.0" };
+    options = { ...options, hostname: process.env.CH_RELAY_BIND_HOST || "0.0.0.0" };
+    if (Number(options.port) === Number(process.env.CH_SHARE_PORT)) options = __relayGoogleRoutes(options);
     if (options.routes && Number(options.port) === Number(process.env.CH_ADMIN_PORT)) {
       options.routes = { ...options.routes };
       for (const [name, type] of [["chunk-2q8tsrp3.js", "text/javascript"], ["chunk-rgssp4v7.css", "text/css"]]) {
@@ -68,6 +82,6 @@ Bun.serve = options => {
 `;
 source = bootstrap + source;
 fs.writeFileSync(path.join(output, "entry.mjs"), source);
-const provenance = { source: "ch-relay-local 1.1.96 OpenAI-only bundle", sourceSha256: sourceHash, packagedSha256: hash(source), assets: assetHashes, changes: ["Executable assets to filesystem", "Explicit Docker service ports bind 0.0.0.0", "Admin static asset routes"], credentialsIncluded: false };
+const provenance = { source: "ch-relay-local 1.1.96 OpenAI-only bundle", sourceSha256: sourceHash, packagedSha256: hash(source), assets: assetHashes, changes: ["Executable assets to filesystem", "Explicit Docker service ports bind 0.0.0.0", "Admin static asset routes", "Native Antigravity Google OAuth transport on inference port; original OpenAI guard unchanged"], credentialsIncluded: false };
 fs.writeFileSync(path.join(output, "provenance.json"), JSON.stringify(provenance, null, 2) + "\n");
 console.log(`Prepared private Docker context: ${output}\nSource SHA-256: ${sourceHash}`);

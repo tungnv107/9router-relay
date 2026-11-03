@@ -101,8 +101,8 @@ export async function handleChat(request, clientRawRequest = null) {
   if (keyAccessDenied) return keyAccessDenied;
 
   // local-only must never escape through a combo/capacity fallback to another provider.
-  if (request.headers.get("x-relay-local-only") === "1" && !/^(ch-relay|chr|codex|cx)\//.test(modelStr)) {
-    return Response.json({ error: { message: "Local-only requires an explicit cx/<model>, codex/<model>, chr/<model> or ch-relay/<model> target" } },
+  if (request.headers.get("x-relay-local-only") === "1" && !/^(ch-relay|chr|codex|cx|antigravity|ag)\//.test(modelStr)) {
+    return Response.json({ error: { message: "Local-only requires an explicit cx/, codex/, chr/, ch-relay/, ag/ or antigravity/ model target" } },
       { status: 412, headers: { "x-relay-upstream-requests": "0", "cache-control": "no-store" } });
   }
 

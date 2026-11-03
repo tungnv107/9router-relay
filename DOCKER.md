@@ -4,7 +4,8 @@ Stack chạy độc lập trên Linux amd64/arm64, không cần proxy Windows ch
 
 ```text
 Client → Nginx Proxy Manager → 9router-relay:20128
-                              └─ OpenAI Codex (cx) / chr → ch-relay:11500 → OpenAI
+                              ├─ OpenAI Codex (cx) / chr → ch-relay:11500 → OpenAI
+                              └─ Antigravity (ag)        → ch-relay:11500 → Google
 ```
 
 Cache/optimizer nằm trong 9router. Backend ch-relay chạy ở service riêng trong cùng Docker Compose. Volume riêng giữ cấu hình/tài khoản sau khi restart hoặc rebuild. Backend vẫn cần tài khoản ChatGPT hợp lệ; cài phần mềm không tự tạo tài khoản/quota.
@@ -25,7 +26,7 @@ Backend là bundle local đã phục hồi của người dùng, không phải s
 node scripts/prepare-ch-relay.mjs 'D:\wsl\ch-relay-local'
 ```
 
-Chuyển riêng thư mục `vendor/ch-relay/` vừa tạo sang cùng vị trí trong checkout server qua SSH/SCP. Chỉ asset và backend được đóng gói, không chép database, account, token hoặc key Windows. Dockerfile dùng Bun 1.4.2 để chạy source trên Linux, thay đường dẫn asset nhúng và địa chỉ lắng nghe; giữ chính sách outbound OpenAI-only của bundle. Có thể dựng lại từ thư mục local và đối chiếu `vendor/ch-relay/provenance.json`.
+Chuyển riêng thư mục `vendor/ch-relay/` vừa tạo sang cùng vị trí trong checkout server qua SSH/SCP. Chỉ asset và backend được đóng gói, không chép database, account, token hoặc key Windows. Dockerfile dùng Bun 1.4.2 để chạy source trên Linux, thay đường dẫn asset nhúng và địa chỉ lắng nghe. Route OpenAI giữ guard OpenAI-only; adapter Antigravity riêng chỉ cho phép inference tới `daily-cloudcode-pa.googleapis.com`. Có thể dựng lại từ thư mục local và đối chiếu `vendor/ch-relay/provenance.json`, gồm hash của adapter Google.
 
 ## Khởi động
 
@@ -42,6 +43,8 @@ Mặc định bind trên server: 9router `127.0.0.1:20128`, admin ch-relay `127.
 9router → Providers → **OpenAI Codex** → Add rồi đăng nhập/import tài khoản. Các connection Codex hiện có tự dùng ch-relay của Compose cho chat/Responses/compact. Tiếp tục dùng model `cx/<model-id>`; không cần tạo connection ch-relay, nhập lại token hoặc cấu hình Base URL ở UI. 9router tự lấy access token và Account ID, giữ cơ chế refresh token. Nếu relay lỗi, inference không tự bỏ qua relay.
 
 **ch-relay Local** là tùy chọn nâng cao khi muốn dùng share key hoặc backend riêng với `chr/<model-id>`. Để Base URL trống sẽ dùng relay của server. Phép Check ở provider này chỉ đọc catalog, chưa chứng minh đăng nhập/inference thành công.
+
+**Antigravity:** connection Google hiện có và model `ag/<model-id>` tự dùng relay cho chat, streaming, tạo ảnh và tìm kiếm. 9router giữ đăng nhập/refresh token và project/quota; relay chỉ nhận access token Google và payload inference. Không cần nhập token vào admin ch-relay. Khi nâng cấp từ bundle OpenAI-only, phải chạy lại script đóng gói ở trên, chuyển toàn bộ `vendor/ch-relay/` mới rồi build lại cả `router` và `ch-relay`. Nếu chỉ rebuild router, endpoint Google trên relay cũ chưa tồn tại và request sẽ thất bại. Cache/optimizer OpenAI không áp dụng cho Antigravity; xem [CH-RELAY.md](CH-RELAY.md).
 
 Không chuyển account Windows tự động. Có thể đăng nhập/quản lý account trong admin ch-relay qua SSH tunnel:
 
@@ -121,6 +124,6 @@ docker compose -f docker-compose.yml -f compose.npm.yml up -d --build
 docker compose -f docker-compose.yml -f compose.npm.yml ps
 ```
 
-Giữ `.env`, `vendor/ch-relay` và ba named volume. Sao lưu `.env` cùng các volume bằng quy trình backup của server; dừng service khi sao lưu SQLite để có bản nhất quán. Không dùng `docker compose down -v` nếu cần giữ tài khoản/lịch sử. Để rollback code, checkout commit cũ rồi build/up lại, không xóa volume.
+Giữ `.env`, `vendor/ch-relay` và ba named volume. Với bản cập nhật transport Google, cập nhật private bundle trước khi chạy lệnh build/up ở trên. Sao lưu `.env` cùng các volume bằng quy trình backup của server; dừng service khi sao lưu SQLite để có bản nhất quán. Không dùng `docker compose down -v` nếu cần giữ tài khoản/lịch sử. Để rollback code, checkout commit cũ và khôi phục bundle tương ứng rồi build/up lại, không xóa volume.
 
 9router chỉ cho phép loopback hoặc origin được operator cho phép chính xác trong `CH_RELAY_ALLOWED_ORIGINS`; UI không thể tự mở allowlist. Không dùng wildcard, credentials hay path trong allowlist. Redirect và outbound proxy bị chặn khi gửi token tới ch-relay.

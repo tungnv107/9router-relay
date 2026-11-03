@@ -1,4 +1,5 @@
 import { platform, arch } from "os";
+import { ANTIGRAVITY_RELAY } from "../config/antigravityRelay.mjs";
 
 // === OS/Arch helpers (Stainless fingerprint) ===
 export function mapStainlessOs() {
@@ -93,7 +94,7 @@ export const ANTHROPIC_COMPAT_BASE = "https://api.anthropic.com/v1";
 // Keep this static even when 9router runs on Linux: the provider profile is
 // intentionally matching the Hub client, not the server host.
 export const ANTIGRAVITY_IDE_VERSION = "2.24.0";
-export const ANTIGRAVITY_IDE_BASE_URL = "https://daily-cloudcode-pa.googleapis.com";
+export const ANTIGRAVITY_IDE_BASE_URL = ANTIGRAVITY_RELAY.upstreamOrigin;
 export const ANTIGRAVITY_IDE_USER_AGENT = `antigravity/hub/${ANTIGRAVITY_IDE_VERSION} darwin/arm64`;
 
 // Shared OAuth config is supplied by the operator at runtime.

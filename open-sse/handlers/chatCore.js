@@ -479,10 +479,11 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
             providerOverrides,
           });
           if (retryResult.response.ok) {
+            await providerResponse.body?.cancel().catch(() => {});
             providerResponse = retryResult.response;
             providerUrl = retryResult.url;
             providerResponseFormat = retryResult.responseFormat || targetFormat;
-          }
+          } else await retryResult.response.body?.cancel().catch(() => {});
         } catch { log?.warn?.("TOKEN", `${provider.toUpperCase()} | retry after refresh failed`); }
       } else {
         log?.warn?.("TOKEN", `${provider.toUpperCase()} | refresh failed`);

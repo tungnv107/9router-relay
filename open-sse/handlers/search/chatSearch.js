@@ -5,6 +5,7 @@
  */
 import { PROVIDER_MEDIA } from "../../providers/index.js";
 import { ANTIGRAVITY_IDE_USER_AGENT } from "../../providers/shared.js";
+import { antigravityRelayHeaders, antigravityRelayUrl, fetchAntigravityRelay } from "../../services/chRelay/antigravity.js";
 
 // Default search model + endpoint derive from registry searchViaChat (single source)
 const searchModel = (id) => PROVIDER_MEDIA[id]?.searchViaChat?.defaultModel;
@@ -450,7 +451,7 @@ export async function handleChatSearch({
     return { success: false, status: 400, error: "Missing query" };
   }
 
-  const token = credentials?.apiKey || credentials?.accessToken;
+  const token = provider === "antigravity" ? credentials?.accessToken : credentials?.apiKey || credentials?.accessToken;
   if (!token) {
     return {
       success: false,
@@ -479,12 +480,15 @@ export async function handleChatSearch({
   let upstreamStart = Date.now();
   let resp;
   try {
-    resp = await fetch(url, {
+    const options = {
       method: "POST",
       headers,
       body: JSON.stringify(body),
       signal: controller.signal
-    });
+    };
+    resp = provider === "antigravity"
+      ? await fetchAntigravityRelay(antigravityRelayUrl(url), { ...options, headers: antigravityRelayHeaders(credentials, headers) })
+      : await fetch(url, options);
   } catch (err) {
     clearTimeout(timer);
     if (err?.name === "AbortError") {

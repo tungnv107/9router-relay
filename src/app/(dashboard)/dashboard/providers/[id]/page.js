@@ -1455,6 +1455,16 @@ export default function ProviderDetailPage() {
         </div>
       )}
 
+      {providerId === "antigravity" && (
+        <div className="flex items-start gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2">
+          <span className="material-symbols-outlined text-[16px] text-blue-500 shrink-0">route</span>
+          <p className="text-xs leading-relaxed text-blue-600 dark:text-blue-400">
+            Chat, image and search requests use the server&apos;s ch-relay with this Google account.
+            Keep using ag/ models. No separate relay account is needed. The server must have the Antigravity relay update installed.
+          </p>
+        </div>
+      )}
+
       {providerInfo.notice?.text && !providerInfo.deprecated && (
         <div className="flex flex-col gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 sm:flex-row sm:items-center">
           <span className="material-symbols-outlined text-[16px] text-blue-500 shrink-0">info</span>

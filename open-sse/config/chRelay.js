@@ -6,5 +6,5 @@ export const CH_RELAY_CONNECTION = Object.freeze({
 });
 
 export function usesChRelay(provider) {
-  return provider === "ch-relay" || provider === "codex";
+  return provider === "ch-relay" || provider === "codex" || provider === "antigravity";
 }

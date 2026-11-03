@@ -19,6 +19,30 @@ Client → 9router /v1 → OpenAI Codex (cx/...) → cache/optimizer trong 9rout
 
 Tự định tuyến áp dụng cho chat/Responses/compact. Đăng nhập, refresh OAuth, kiểm tra tài khoản/quota và các endpoint image/STT riêng vẫn dùng luồng Codex hiện có.
 
+## Antigravity / Google OAuth
+
+Các connection Antigravity hiện có tự đi theo luồng `Client → 9router (ag/...) → ch-relay → Google`. Chat thường, SSE, tạo ảnh và `/v1/search` dùng endpoint riêng `/v1/antigravity/v1internal:generateContent` hoặc `/v1/antigravity/v1internal:streamGenerateContent?alt=sse` trên cùng inference port của relay. Không cần tạo connection ch-relay hay sao chép token.
+
+Relay giữ nguyên JSON Google, project ID, tool calls, thought signatures và dữ liệu ảnh; không chuyển chúng qua Responses/Chat Completions. Access token lấy từ connection Google được 9router chọn, gửi bằng `Authorization: Bearer`. Google kiểm tra credential và quyền truy cập; lỗi 401/403 được chuyển về 9router để luồng chat refresh OAuth, lưu credential mới và thử lại qua relay. Refresh token và OAuth client secret không gửi sang relay. Đăng nhập, đổi/refresh token, discovery project và quota vẫn do 9router gọi Google như trước. Việc dùng bearer/refresh token tuân theo [tài liệu Google OAuth](https://developers.google.com/identity/protocols/oauth2/web-server).
+
+Google transport chỉ cho phép hai endpoint inference trên `https://daily-cloudcode-pa.googleapis.com`; không nhận URL tùy ý, token trong query hoặc redirect, không dùng proxy môi trường. Các route OpenAI giữ guard ban đầu. `/api/network-policy` thể hiện origin cho từng provider. Nếu relay chưa được cập nhật hoặc không chạy, Antigravity báo lỗi; không gọi inference Google trực tiếp để bỏ qua relay.
+
+Policy kill/cancel vẫn áp dụng. Exact response cache và optimizer OpenAI không áp dụng cho payload Google; `X-Relay-Cache` trả `bypass`, `X-Relay-Local-Only: 1` trả 412 và không gọi relay. Usage lấy từ Google, không cộng buffer 2.000 token. Không có cam kết giảm quota chỉ nhờ đổi tuyến.
+
+**Cần cập nhật đồng thời router và backend:** chạy lại `node scripts/prepare-ch-relay.mjs 'D:\wsl\ch-relay-local'`, chuyển riêng bundle `vendor/ch-relay/` mới sang server, rồi build lại cả hai service theo [DOCKER.md](DOCKER.md). Git không chứa private bundle nên chỉ cập nhật source 9router là chưa đủ. OAuth tiếp tục dùng `ANTIGRAVITY_OAUTH_CLIENT_ID/SECRET` hiện có.
+
+Kiểm chứng local không dùng tài khoản thật:
+
+```powershell
+npm run test:ch-relay
+# Cần Bun 1.4.2 trên PATH, hoặc đặt BUN_BIN tới executable Bun.
+npm run test:antigravity-backend
+```
+
+Bài kiểm tra backend khởi động chính bundle Bun đã đóng gói với profile tạm, chuyển Google tới HTTP fixture local, kiểm tra JSON/SSE/401, chặn request thiếu token/route không hợp lệ và giữ xác thực OpenAI. Kết quả ghi tại `.scratch/antigravity-backend-report.json`. Bài kiểm tra này không chứng minh tài khoản Google thật có quyền sử dụng model; không sử dụng hay tiêu thụ quota của tài khoản production.
+
+## Chat Completions / Responses của Codex
+
 Provider hỗ trợ Chat Completions và Responses. Khi client dùng hai định dạng này, request giữ reasoning, encrypted state, prompt cache key, tool-call ID và history qua 9router. Client định dạng khác dùng translator sẵn có của 9router.
 
 `/v1/responses/compact` được chuyển đúng endpoint compact của relay, không cache state và không gửi cờ nội bộ `_compact` lên upstream.
@@ -57,7 +81,7 @@ Invoke-WebRequest 'http://127.0.0.1:20127/v1/chat/completions' -Method Post -Hea
 
 Header kết quả: `X-Relay-Cache: miss|hit|bypass|would-hit`, `X-Relay-Policy-Mode`, `X-Relay-Policy-Revision`. Hit thêm `X-Relay-Upstream-Requests: 0`, `X-Relay-Billable-Tokens: 0`, `X-Relay-Usage-Source: local-cache`. Miss giữ nguyên usage relay trả về; 9router không cộng buffer 2.000 token hay ước lượng bù usage cho provider này. Usage của relay chưa phải số liệu hóa đơn/percentage quota được xác minh trực tiếp từ upstream.
 
-`X-Relay-Local-Only: 1` chỉ chấp nhận model có prefix `cx/`, `codex/`, `chr/` hoặc `ch-relay/`, không chấp nhận combo/alias tổng quát để tránh fallback ra provider khác. Miss trả 412; kill=block trả 503. Không làm khóa hoặc xoay account khi bị policy chặn tại local.
+`X-Relay-Local-Only: 1` chỉ chấp nhận model có prefix `cx/`, `codex/`, `chr/`, `ch-relay/`, `ag/` hoặc `antigravity/`, không chấp nhận combo/alias tổng quát để tránh fallback ra provider khác. Miss trả 412; Antigravity luôn trả 412 vì không có response cache; kill=block trả 503. Không làm khóa hoặc xoay account khi bị policy chặn tại local.
 
 Request có tools, tool history, encrypted reasoning, ảnh/audio, previous_response_id, conversation, store=true, background hoặc trường chưa biết sẽ không cache câu trả lời. Không cache lỗi, refusal, stream bị ngắt hoặc response chưa hoàn tất. Hai cold miss đồng thời vẫn có thể gọi upstream hai lần. Các phiên coding dùng tools thường không có response-cache hit; không có cam kết miễn token hay tăng quota tài khoản.
 

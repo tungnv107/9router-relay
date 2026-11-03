@@ -97,6 +97,10 @@ export class BaseExecutor {
     return { status: response.status, message: bodyText || `HTTP ${response.status}` };
   }
 
+  fetchRequest(url, options, proxyOptions) {
+    return proxyAwareFetch(url, options, proxyOptions);
+  }
+
   async execute({ model, body, stream, credentials, signal, log, proxyOptions = null, providerOverrides = null, directFetch = null }) {
     const fallbackCount = this.getFallbackCount();
     let lastError = null;
@@ -118,6 +122,8 @@ export class BaseExecutor {
         if (dynamic === false) return false; // hook vetoes retry (e.g. Retry-After too long)
         if (dynamic != null) waitMs = dynamic;
       }
+      // Release the discarded body before retrying (including relay policy streams).
+      await response?.body?.cancel().catch(() => {});
       retryAttemptsByUrl[urlIndex]++;
       log?.debug?.("RETRY", `${reason} retry ${retryAttemptsByUrl[urlIndex]}/${attempts} after ${waitMs / 1000}s`);
       await new Promise(resolve => setTimeout(resolve, waitMs));
@@ -143,7 +149,7 @@ export class BaseExecutor {
         const bodyStr = JSON.stringify(transformedBody);
         const fetchT0 = Date.now();
         dbg("FETCH", `${this.provider.toUpperCase()} → ${url} | body=${bodyStr.length}B | connectTimeout=${timeoutMs}ms`);
-        const response = await proxyAwareFetch(url, {
+        const response = await this.fetchRequest(url, {
           method: "POST",
           headers,
           body: bodyStr,
@@ -160,6 +166,7 @@ export class BaseExecutor {
         if (await tryRetry(urlIndex, response.status, `status ${response.status}`, response)) { urlIndex--; continue; }
 
         if (this.shouldRetry(response.status, urlIndex)) {
+          await response.body?.cancel().catch(() => {});
           log?.debug?.("RETRY", `${response.status} on ${url}, trying fallback ${urlIndex + 1}`);
           lastStatus = response.status;
           continue;

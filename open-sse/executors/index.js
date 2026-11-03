@@ -1,4 +1,4 @@
-import { AntigravityExecutor } from "./antigravity.js";
+import { AntigravityRelayExecutor } from "./antigravity-relay.js";
 import { AzureExecutor } from "./azure.js";
 import { BedrockExecutor } from "./bedrock.js";
 import { GeminiCLIExecutor } from "./gemini-cli.js";
@@ -38,7 +38,7 @@ import { MinimaxCodeExecutor } from "./minimax-code.js";
 import { DevinCliExecutor } from "./devin-cli.js";
 
 const executors = {
-  antigravity: new AntigravityExecutor(),
+  antigravity: new AntigravityRelayExecutor(),
   azure: new AzureExecutor(),
   "gemini-cli": new GeminiCLIExecutor(),
   github: new GithubExecutor(),
