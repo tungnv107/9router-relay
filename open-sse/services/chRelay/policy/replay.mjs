@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { isAntigravityEndpoint } from '../../../config/antigravityRelay.mjs';
+import { inspectAntigravityJson, inspectAntigravityFrames, rewriteAntigravityReplay } from './antigravityReplay.mjs';
 
 const plainOutput = items => Array.isArray(items) && items.length > 0 && items.every(item=>
   item?.type === 'message' && item.role === 'assistant' && (!item.status || item.status === 'completed') && Array.isArray(item.content) && item.content.length > 0 &&
@@ -30,11 +32,19 @@ export function inspectReplay(bytes, type, endpoint) {
     const text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);
     if (type.includes('application/json')) {
       const json=JSON.parse(text);
+      if (isAntigravityEndpoint(endpoint)) {
+        const inspected=inspectAntigravityJson(json);
+        return inspected ? {json,...inspected} : null;
+      }
       const ok=endpoint==='/v1/responses' ? validResponse(json) : json?.object==='chat.completion' && Array.isArray(json.choices) && json.choices.length>0 && json.choices.every(c=>c.finish_reason==='stop' && plainChat(c.message));
       return ok ? {json,originalUsage:safeUsage(json.usage)} : null;
     }
     if (!type.includes('text/event-stream')) return null;
     const frames=sseFrames(text); if (!frames) return null;
+    if (isAntigravityEndpoint(endpoint)) {
+      const inspected=inspectAntigravityFrames(frames);
+      return inspected ? {frames,...inspected} : null;
+    }
     let completed=null, done=false; const choices=new Map();
     const allowedEvents=new Set(['response.created','response.in_progress','response.output_item.added','response.content_part.added','response.output_text.delta','response.output_text.done','response.content_part.done','response.output_item.done','response.completed']);
     for (const f of frames) {
@@ -69,6 +79,7 @@ export function replayBytes(entry, endpoint) {
   const id = old => { if (!ids.has(old)) ids.set(old,(old.startsWith('msg_')?'msg_local_':old.startsWith('chatcmpl')?'chatcmpl-local-':'resp_local_')+randomUUID().replaceAll('-','')); return ids.get(old); };
   const rewrite = obj => {
     if (!obj || typeof obj!=='object') return;
+    if (isAntigravityEndpoint(endpoint)) { rewriteAntigravityReplay(obj,ids); return; }
     if (Object.hasOwn(obj,'usage')) obj.usage=zeroUsage(endpoint);
     for (const key of ['id','response_id','item_id']) if (typeof obj[key]==='string') obj[key]=id(obj[key]);
     if (typeof obj.created_at==='number') obj.created_at=Math.floor(Date.now()/1000);

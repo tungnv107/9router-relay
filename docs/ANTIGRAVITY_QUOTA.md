@@ -2,6 +2,8 @@
 
 Ngày nghiên cứu: 03/11/2026 (Asia/Saigon). Phạm vi: cả Gemini và Claude trong provider Antigravity. Các kết quả dưới đây ghi nhận kiểm chứng local trước khi triển khai server.
 
+**Bổ sung sau nghiên cứu:** [Antigravity parity](ANTIGRAVITY_PARITY.md) đã thêm native JSON/SSE replay và thinking policy theo model. Những mô tả bên dưới về response cache luôn bypass/thinking chưa được điều chỉnh là trạng thái trước bổ sung này. Các số liệu bytes RTK vẫn là phép đo lịch sử, không phải phần trăm quota.
+
 ## Kết luận có bằng chứng
 
 Antigravity đã có tuyến bắt buộc `9router → ch-relay → Google` từ commit `3d5e5920`. Executor không fallback inference trực tiếp khi relay lỗi. Nhưng trước bản sửa này, Google transport chỉ chuyển tiếp payload; policy chỉ tối ưu `/v1/responses` và `/v1/chat/completions`.

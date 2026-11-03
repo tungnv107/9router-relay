@@ -1,13 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { ANTIGRAVITY_POLICY } from '../../../config/antigravityRelay.mjs';
 
 export const defaults = {
   version: 1, mode: 'dry-run', killSwitch: 'none',
   cache: { enabled: true, requireOptIn: true, ttlMs: 300000, maxEntries: 128, maxBytes: 16777216, maxEntryBytes: 2097152, maxRequestBytes: 2097152 },
   promptCache: { enabled: false, models: [] },
   context: { deduplicateTools: false, maxToolOutputChars: 0 },
-  reasoning: { models: {} },
+  reasoning: { models: {}, antigravityModels: {} },
   audit: { enabled: true, maxBytes: 2097152 }
 };
 const record = x => x !== null && typeof x === 'object' && !Array.isArray(x);
@@ -39,6 +40,23 @@ export function validateConfig(input) {
     if (!Array.isArray(rule.supported) || !rule.supported.length || new Set(rule.supported).size !== rule.supported.length || rule.supported.some(x=>!['none','minimal','low','medium','high','xhigh','max','ultra'].includes(x))) throw Error('Invalid supported efforts');
     for (const k of ['defaultEffort','maxEffort']) if (rule[k] !== undefined && !rule.supported.includes(rule[k])) throw Error('Unsupported effort');
     if (rule.allowExplicitDowngrade !== undefined && typeof rule.allowExplicitDowngrade !== 'boolean') throw Error('Invalid allowExplicitDowngrade');
+  }
+  if (!record(value.reasoning.antigravityModels)) throw Error('Invalid Antigravity thinking models');
+  for (const [model,rule] of Object.entries(value.reasoning.antigravityModels)) {
+    if (!model || model.length > 200) throw Error('Invalid Antigravity model');
+    keys(rule,['field','defaultValue','maxValue','supported','allowExplicitDowngrade'],'Antigravity thinking rule');
+    if (!['thinkingBudget','thinkingLevel'].includes(rule.field)) throw Error('Invalid native thinking field');
+    if (rule.allowExplicitDowngrade !== undefined && typeof rule.allowExplicitDowngrade !== 'boolean') throw Error('Invalid allowExplicitDowngrade');
+    if (rule.field === 'thinkingLevel') {
+      if (!Array.isArray(rule.supported) || !rule.supported.length || new Set(rule.supported).size !== rule.supported.length ||
+          rule.supported.some((level,index) => !ANTIGRAVITY_POLICY.thinkingLevels.includes(level) || index > 0 && ANTIGRAVITY_POLICY.thinkingLevels.indexOf(level) <= ANTIGRAVITY_POLICY.thinkingLevels.indexOf(rule.supported[index-1]))) throw Error('Invalid native thinking levels');
+      for (const key of ['defaultValue','maxValue']) if (rule[key] !== undefined && !rule.supported.includes(rule[key])) throw Error('Unsupported native thinking level');
+    } else {
+      if (rule.supported !== undefined) throw Error('Numeric thinking budgets do not use supported levels');
+      for (const key of ['defaultValue','maxValue']) if (rule[key] !== undefined) integer(rule[key], key === 'defaultValue' ? -1 : 0, ANTIGRAVITY_POLICY.maxThinkingBudget, key);
+    }
+    if (rule.defaultValue !== undefined && rule.maxValue !== undefined &&
+        (rule.field === 'thinkingBudget' ? rule.defaultValue === -1 || rule.defaultValue > rule.maxValue : rule.supported.indexOf(rule.defaultValue) > rule.supported.indexOf(rule.maxValue))) throw Error('Default thinking exceeds maximum');
   }
   return value;
 }

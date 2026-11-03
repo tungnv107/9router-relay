@@ -92,6 +92,17 @@ describe("private ch-relay Google protocol handler", () => {
     expect(await response.json()).toEqual(error);
   });
 
+  it.each([
+    [{}, "private, no-cache"],
+    [{ "cache-control": "public, max-age=600" }, "private, no-cache"],
+    [{ "cache-control": "no-store" }, "no-store"],
+    [{ "set-cookie": "private" }, "no-store"],
+  ])("allows only explicit application replay while preserving upstream cache restrictions (%j)", async (headers, expected) => {
+    const response = await createAntigravityHandler({ fetchImpl: async () => Response.json({}, { headers }) })(request());
+    expect(response.headers.get("cache-control")).toBe(expected);
+    await response.text();
+  });
+
   it("refuses redirects and hides credential-bearing transport errors", async () => {
     for (const fetchImpl of [async () => new Response(null, { status: 302, headers: { location: "https://evil.example" } }), async () => { throw new Error("private-token"); }]) {
       const response = await createAntigravityHandler({ fetchImpl })(request());

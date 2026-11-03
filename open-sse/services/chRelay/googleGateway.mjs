@@ -82,7 +82,10 @@ export function createAntigravityHandler({ fetchImpl = globalThis.fetch, maxRequ
     for (const name of [...responseHeaders.keys()]) {
       if (excludedResponseHeaders.has(name) || name.startsWith("x-relay-")) responseHeaders.delete(name);
     }
-    responseHeaders.set("cache-control", "no-store");
+    // Permit the router's explicitly scoped application cache, never a shared HTTP
+    // cache. Preserve upstream no-store (including stripped cookie responses).
+    const upstreamNoStore = /no-store/i.test(upstream.headers.get("cache-control") || "");
+    responseHeaders.set("cache-control", upstreamNoStore || upstream.headers.has("set-cookie") ? "no-store" : "private, no-cache");
     responseHeaders.set("x-relay-upstream-requests", "1");
     if (!upstream.body) return new Response(null, { status: upstream.status, headers: responseHeaders });
     const reader = upstream.body.getReader();

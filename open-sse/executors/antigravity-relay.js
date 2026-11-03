@@ -17,7 +17,7 @@ export class AntigravityRelayExecutor extends AntigravityExecutor {
   getFallbackCount() { return 1; }
 
   buildHeaders(credentials, stream) {
-    return Object.fromEntries(antigravityRelayHeaders(credentials, super.buildHeaders(credentials, stream)));
+    return Object.fromEntries(antigravityRelayHeaders(credentials, super.buildHeaders(credentials, stream), this.relayOptions.policy));
   }
 
   transformRequest(model, body, stream, credentials) {

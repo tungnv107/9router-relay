@@ -1,6 +1,8 @@
 import { ANTIGRAVITY_RELAY, antigravityRelayTarget } from "../../config/antigravityRelay.mjs";
 import { chRelayFetch, resolveChRelayBaseUrl } from "./connection.js";
 import { handleChRelayRequest } from "./transport.js";
+import { applyRelayControls } from "./controls.js";
+import { getChRelayPolicy } from "./runtime.js";
 
 export function antigravityRelayUrl(upstreamUrl) {
   const upstream = new URL(upstreamUrl);
@@ -12,7 +14,7 @@ export function antigravityRelayUrl(upstreamUrl) {
   return url;
 }
 
-export function antigravityRelayHeaders(credentials, original = {}) {
+export function antigravityRelayHeaders(credentials, original = {}, policy = getChRelayPolicy()) {
   const token = credentials?.accessToken;
   if (!token || /\s/.test(token)) throw new Error("A Google OAuth access token is required for Antigravity");
   const headers = new Headers();
@@ -22,11 +24,7 @@ export function antigravityRelayHeaders(credentials, original = {}) {
   }
   headers.set("authorization", `Bearer ${token}`);
   headers.set("content-type", "application/json");
-  const raw = new Headers(credentials?.rawHeaders || {});
-  if (raw.has("x-relay-local-only")) headers.set("x-relay-local-only", raw.get("x-relay-local-only"));
-  if (raw.has("x-relay-context")) headers.set("x-relay-context", raw.get("x-relay-context"));
-  if (raw.get("x-9router-token-saver")?.toLowerCase() === "off") headers.set("x-relay-optimizer", "off");
-  return headers;
+  return applyRelayControls(headers, credentials, policy || getChRelayPolicy());
 }
 
 export async function fetchAntigravityRelay(url, options, { fetchImpl = chRelayFetch, policy } = {}) {
@@ -38,8 +36,7 @@ export async function fetchAntigravityRelay(url, options, { fetchImpl = chRelayF
   const request = new Request(target, {
     method: "POST", headers: options.headers, body: options.body, signal: options.signal,
   });
-  // Apply native Google context optimization without OpenAI field conversion or
-  // response replay. Policy strips local controls before the network call.
+  // Apply native Google replay/context/thinking policy before network transport.
   return handleChRelayRequest(request, async outgoing => fetchImpl(target.href, {
     method: "POST", headers: outgoing.headers, body: await outgoing.text(),
     signal: outgoing.signal, redirect: "error",

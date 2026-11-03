@@ -52,6 +52,7 @@ source/*
 docs/*
 !docs/ARCHITECTURE.md
 !docs/ANTIGRAVITY_QUOTA.md
+!docs/ANTIGRAVITY_PARITY.md
 test/*
 open-sse/test/*
 RM.vn.md

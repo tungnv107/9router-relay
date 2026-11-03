@@ -13,6 +13,6 @@
   },
   "promptCache": { "enabled": false, "models": [] },
   "context": { "deduplicateTools": true, "maxToolOutputChars": 0 },
-  "reasoning": { "models": {} },
+  "reasoning": { "models": {}, "antigravityModels": {} },
   "audit": { "enabled": false, "maxBytes": 2097152 }
 }

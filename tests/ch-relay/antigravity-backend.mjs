@@ -8,6 +8,8 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
+import { PolicyEngine } from "../../open-sse/services/chRelay/policy/engine.mjs";
+import { defaults } from "../../open-sse/services/chRelay/policy/config.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const scratch = path.join(root, ".scratch");
 fs.mkdirSync(scratch, { recursive: true });
@@ -22,6 +24,10 @@ const freePort = async () => {
   return port;
 };
 const calls = [];
+const reply = (text, finished = true) => ({ response: {
+  candidates: [{ index: 0, content: { role: "model", parts: [{ text }] }, ...(finished ? { finishReason: "STOP" } : {}) }],
+  ...(finished ? { usageMetadata: { promptTokenCount: 11, candidatesTokenCount: 3, totalTokenCount: 14 } } : {}),
+} });
 const fixture = http.createServer(async (req, res) => {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -32,11 +38,11 @@ const fixture = http.createServer(async (req, res) => {
     res.end(JSON.stringify({ error: { code: 401, status: "UNAUTHENTICATED" } }));
   } else if (req.url.includes("streamGenerateContent")) {
     res.writeHead(200, { "content-type": "text/event-stream" });
-    res.write('data: {"response":{"text":"FIRST"}}\n\n');
-    setTimeout(() => res.end('data: {"response":{"text":"LAST"}}\n\n'), 100);
+    res.write(`data: ${JSON.stringify(reply("FIRST", false))}\n\n`);
+    setTimeout(() => res.end(`data: ${JSON.stringify(reply("LAST"))}\n\n`), 100);
   } else {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ response: { text: "GOOGLE_BACKEND_OK", thoughtSignature: "opaque" } }));
+    res.end(JSON.stringify(reply("GOOGLE_BACKEND_OK")));
   }
 });
 let child, exited, output = "";
@@ -76,7 +82,7 @@ try {
   assert.equal(calls.length, 0);
   const json = await post(route, "fixture-google");
   assert.equal(json.status, 200);
-  assert.equal((await json.json()).response.text, "GOOGLE_BACKEND_OK");
+  assert.equal((await json.json()).response.candidates[0].content.parts[0].text, "GOOGLE_BACKEND_OK");
   assert.equal(calls[0].token, "Bearer fixture-google");
   assert.equal(calls[0].body.project, "fixture-project");
   const expired = await post(route, "expired-google");
@@ -90,11 +96,31 @@ try {
   let remaining = "";
   for (;;) { const part = await reader.read(); if (part.done) break; remaining += new TextDecoder().decode(part.value); }
   assert.match(remaining, /LAST/);
+  const cache = new PolicyEngine({ readConfig: () => ({ ...defaults, mode: "enforce" }) });
+  const replayReport = [];
+  for (const endpoint of [route, "/v1/antigravity/v1internal:streamGenerateContent?alt=sse"]) {
+    const before = calls.length;
+    const payload = { model: "fixture", project: "fixture-project", request: { sessionId: "smoke-session", contents: [{ role: "user", parts: [{ text: "Static smoke question" }] }] } };
+    const request = only => new Request(base + endpoint, { method: "POST", headers: {
+      authorization: "Bearer fixture-google", "content-type": "application/json", "x-relay-cache": "allow", "x-relay-cache-scope": "backend-smoke",
+      ...(only ? { "x-relay-local-only": "1" } : {}),
+    }, body: JSON.stringify({ ...payload, requestId: only ? "next-request" : "first-request" }), signal: AbortSignal.timeout(5000) });
+    const cold = await cache.handle(request(false), outgoing => fetch(outgoing));
+    assert.equal(cold.status, 200); assert.match(await cold.text(), /"totalTokenCount":14/);
+    const coldCalls = calls.length - before;
+    const warm = await cache.handle(request(true), outgoing => fetch(outgoing));
+    assert.equal(warm.status, 200);
+    assert.equal(warm.headers.get("x-relay-cache"), "hit");
+    assert.equal(warm.headers.get("x-relay-upstream-requests"), "0");
+    assert.match(await warm.text(), /"totalTokenCount":0/);
+    assert.equal(coldCalls, 1); assert.equal(calls.length - before, 1);
+    replayReport.push({ endpoint, coldUpstreamCalls: coldCalls, replayUpstreamCalls: 0, replayUsage: 0 });
+  }
   const policy = await (await fetch(`http://127.0.0.1:${adminPort}/api/network-policy`, { headers: { "x-ch-relay": "1" } })).json();
   assert.equal(policy.antigravity.authentication, "google-oauth-access-token");
   assert.deepEqual(policy.providerOrigins.openai, ["https://chatgpt.com", "https://auth.openai.com"]);
   assert.equal((await post("/v1/responses")).status, 401);
-  const report = { packagedBackend: true, googleJson: true, googleStreaming: true, google401: true, unauthenticatedBlocked: true, unknownRoutesBlocked: true, openaiAuthPreserved: true, syntheticUpstreamCalls: calls.length, liveGoogleAccountTested: false };
+  const report = { packagedBackend: true, googleJson: true, googleStreaming: true, google401: true, unauthenticatedBlocked: true, unknownRoutesBlocked: true, openaiAuthPreserved: true, replay: replayReport, syntheticUpstreamCalls: calls.length, liveGoogleAccountTested: false };
   fs.writeFileSync(path.join(scratch, "antigravity-backend-report.json"), JSON.stringify(report, null, 2) + "\n");
   console.log(JSON.stringify(report, null, 2));
 } finally {

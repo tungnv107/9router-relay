@@ -15,15 +15,15 @@ const listen = server => new Promise(resolve => server.listen(0, "127.0.0.1", re
 const close = async server => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); };
 
 describe("Antigravity OAuth through ch-relay and a real HTTP Google fixture", () => {
-  let relay, google, base, calls, relayCalls, executor, status;
+  let relay, google, base, calls, relayCalls, executor, status, responseBody, responseHeaders;
   beforeAll(async () => {
     google = http.createServer(async (req, res) => {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
       calls.push({ path: req.url, headers: req.headers, body: JSON.parse(Buffer.concat(chunks).toString()) });
       const streaming = req.url.includes("streamGenerateContent");
-      res.writeHead(status, { "content-type": streaming ? "text/event-stream" : "application/json", ...(status === 429 ? { "retry-after": "60" } : {}) });
-      res.end(status !== 200 ? JSON.stringify({ error: { code: status, message: "Google fixture error" } }) : streaming ? `data: ${JSON.stringify(fixtureBody)}\n\n` : JSON.stringify(fixtureBody));
+      res.writeHead(status, { "content-type": streaming ? "text/event-stream" : "application/json", ...(status === 429 ? { "retry-after": "60" } : {}), ...responseHeaders });
+      res.end(status !== 200 ? JSON.stringify({ error: { code: status, message: "Google fixture error" } }) : streaming ? `data: ${JSON.stringify(responseBody)}\n\n` : JSON.stringify(responseBody));
     });
     await listen(google);
     const handler = createAntigravityHandler({ fetchImpl: (target, init) => {
@@ -48,6 +48,7 @@ describe("Antigravity OAuth through ch-relay and a real HTTP Google fixture", ()
   });
   beforeEach(() => {
     calls = []; relayCalls = []; status = 200;
+    responseBody = structuredClone(fixtureBody); responseHeaders = {};
     vi.stubEnv("CH_RELAY_BASE_URL", base);
     vi.stubEnv("CH_RELAY_ALLOWED_ORIGINS", "");
     vi.stubEnv("HTTPS_PROXY", "http://127.0.0.1:1");
@@ -81,6 +82,62 @@ describe("Antigravity OAuth through ch-relay and a real HTTP Google fixture", ()
     expect(calls[0].headers["user-agent"]).toContain("antigravity/");
     expect(JSON.stringify(calls)).not.toContain("private-refresh");
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([[false, "gemini-2.5-flash"], [true, "gemini-2.5-flash"], [false, "claude-sonnet-4-6"], [true, "claude-sonnet-4-6"]])("replays native text through real HTTP with zero additional Google calls (stream=%s, model=%s)", async (stream, model) => {
+    delete responseBody.response.candidates[0].content.parts[0].thoughtSignature;
+    const request = args({ stream, model });
+    request.credentials.rawHeaders = { authorization: "Bearer router-key-a", "x-relay-cache": "allow", "x-relay-cache-scope": "static-fixture" };
+    request.body.requestId = "agent/conversation/1/trajectory/1";
+    const cold = await executor.execute(request);
+    expect(await cold.response.text()).toContain('"totalTokenCount":14');
+    request.body.requestId = "agent/conversation/2/trajectory/1";
+    request.credentials.rawHeaders["x-relay-local-only"] = "1";
+    const warm = await executor.execute(request);
+    expect(warm.response.status).toBe(200);
+    expect(warm.response.headers.get("x-relay-cache")).toBe("hit");
+    expect(warm.response.headers.get("x-relay-upstream-requests")).toBe("0");
+    expect(await warm.response.text()).toContain('"totalTokenCount":0');
+    expect(calls).toHaveLength(1); expect(relayCalls).toHaveLength(1);
+    expect(Object.keys(calls[0].headers).some(key => key.startsWith("x-relay-"))).toBe(false);
+    request.credentials.rawHeaders.authorization = "Bearer router-key-b";
+    const otherCaller = await executor.execute(request);
+    expect(otherCaller.response.status).toBe(412); await otherCaller.response.text();
+    expect(calls).toHaveLength(1);
+  });
+
+  it.each(["cookie", "idempotency-key", "x-9router-token-saver"])("honors native cache opt-out via %s before relay HTTP", async header => {
+    delete responseBody.response.candidates[0].content.parts[0].thoughtSignature;
+    const request = args();
+    request.credentials.rawHeaders = { "x-relay-cache": "allow", "x-relay-cache-scope": "static-fixture" };
+    await (await executor.execute(request)).response.text();
+    request.credentials.rawHeaders[header] = header === "x-9router-token-saver" ? "off" : "private";
+    const bypass = await executor.execute(request);
+    expect(bypass.response.headers.get("x-relay-cache")).toBe("bypass");
+    await bypass.response.text(); expect(calls).toHaveLength(2);
+  });
+
+  it("preserves upstream no-store across the Google gateway", async () => {
+    delete responseBody.response.candidates[0].content.parts[0].thoughtSignature;
+    responseHeaders = { "cache-control": "no-store" };
+    const request = args();
+    request.credentials.rawHeaders = { "x-relay-cache": "allow", "x-relay-cache-scope": "static-fixture" };
+    await (await executor.execute(request)).response.text();
+    await (await executor.execute(request)).response.text();
+    expect(calls).toHaveLength(2);
+  });
+
+  it.each(["enforce", "dry-run", "off"])("applies model-specific native thinking through HTTP in %s mode", async mode => {
+    const policy = new PolicyEngine({ readConfig: () => ({ ...chRelayDefaults, mode, reasoning: { models: {}, antigravityModels: { "gemini-2.5-flash": { field: "thinkingBudget", maxValue: 2048, allowExplicitDowngrade: true } } } }) });
+    executor = new AntigravityRelayExecutor({ policy });
+    const request = args();
+    request.body.request.generationConfig = { maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 4096, includeThoughts: true } };
+    request.credentials.rawHeaders = { "x-relay-reasoning": "allow-downgrade" };
+    await (await executor.execute(request)).response.text();
+    expect(calls[0].body.request.generationConfig).toEqual({ maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: mode === "enforce" ? 2048 : 4096, includeThoughts: true } });
+    expect(calls[0].body.reasoning).toBeUndefined();
+    expect(calls[0].body.prompt_cache_key).toBeUndefined();
+    expect(request.body.request.generationConfig.thinkingConfig.thinkingBudget).toBe(4096);
   });
 
   it("ignores forged auth, ChatGPT headers and per-account URLs without mutating credentials", async () => {

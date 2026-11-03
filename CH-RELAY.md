@@ -31,7 +31,9 @@ Policy kill/cancel vẫn áp dụng. RTK đọc được `functionResponse.respo
 
 Policy ch-relay hỗ trợ tối ưu context Google trực tiếp: bỏ declaration trùng hoàn toàn và tùy chọn cắt chuỗi output tool với marker. Cắt output cần cả `context.maxToolOutputChars >= 256` lẫn `X-Relay-Context: truncate-tool-output`; mặc định giới hạn là 0, không cắt. `dry-run`, `off` và `X-9Router-Token-Saver: off` được tôn trọng. Các header điều khiển local không gửi tới Google. Không áp dụng `prompt_cache_key` hoặc reasoning optimizer OpenAI lên payload Google.
 
-Exact response cache vẫn không áp dụng cho Google: `X-Relay-Cache` trả `bypass`, `X-Relay-Local-Only: 1` trả 412 và không gọi relay (payload không hợp lệ/quá giới hạn có thể trả 400/413). Usage lấy từ Google, không cộng buffer 2.000 token. Không có cam kết giảm quota chỉ nhờ đổi tuyến; xem [nghiên cứu quota và phép đo payload](docs/ANTIGRAVITY_QUOTA.md).
+Exact response cache hỗ trợ Google native JSON và SSE khi gửi `X-Relay-Cache: allow` cùng `X-Relay-Cache-Scope`. Chỉ lưu đáp án văn bản hoàn chỉnh, không có tool/thought signature/ảnh/grounding hay trường chưa biết. Khóa cache giữ credential Google, API key/connection 9router, project, session, model và toàn bộ nội dung/cấu hình; chỉ bỏ `requestId` chứa timestamp. Lượt hit trả `X-Relay-Upstream-Requests: 0`, ID mới và usage native bằng 0; lượt miss giữ usage Google. `X-Relay-Local-Only: 1` phục vụ hit hoặc trả 412 mà không gọi relay. TTL/LRU, giới hạn bộ nhớ, kill, hủy stream và opt-out giống Codex.
+
+Để thử, dùng mẫu PowerShell ở phần cache bên dưới, đổi model thành `ag/<model-id>` và thêm `X-Session-Id` cố định cho cùng tác vụ. Đổi scope khi dữ liệu của tác vụ thay đổi. Cả Gemini và Claude qua Antigravity đều dùng bộ kiểm tra payload native này. Phiên coding có tools hoặc signed history vẫn đi upstream; RTK/context/thinking là các cơ chế giảm tải cho trường hợp đó. Chi tiết kiểm chứng: [Antigravity parity](docs/ANTIGRAVITY_PARITY.md).
 
 **Cần cập nhật đồng thời router và backend:** chạy lại `node scripts/prepare-ch-relay.mjs 'D:\wsl\ch-relay-local'`, chuyển riêng bundle `vendor/ch-relay/` mới sang server, rồi build lại cả hai service theo [DOCKER.md](DOCKER.md). Git không chứa private bundle nên chỉ cập nhật source 9router là chưa đủ. OAuth tiếp tục dùng `ANTIGRAVITY_OAUTH_CLIENT_ID/SECRET` hiện có.
 
@@ -43,7 +45,7 @@ npm run test:ch-relay
 npm run test:antigravity-backend
 ```
 
-Bài kiểm tra backend khởi động chính bundle Bun đã đóng gói với profile tạm, chuyển Google tới HTTP fixture local, kiểm tra JSON/SSE/401, chặn request thiếu token/route không hợp lệ và giữ xác thực OpenAI. Kết quả ghi tại `.scratch/antigravity-backend-report.json`. Bài kiểm tra này không chứng minh tài khoản Google thật có quyền sử dụng model; không sử dụng hay tiêu thụ quota của tài khoản production.
+Bài kiểm tra backend khởi động chính bundle Bun đã đóng gói với profile tạm, chuyển Google tới HTTP fixture local, kiểm tra JSON/SSE/401, chặn request thiếu token/route không hợp lệ và giữ xác thực OpenAI. Mỗi cold request JSON/SSE gọi upstream một lần; replay thêm 0 lần, usage bằng 0. Kết quả ghi tại `.scratch/antigravity-backend-report.json`. Bài kiểm tra không sử dụng quota của tài khoản production.
 
 ## Chat Completions / Responses của Codex
 
@@ -85,7 +87,7 @@ Invoke-WebRequest 'http://127.0.0.1:20127/v1/chat/completions' -Method Post -Hea
 
 Header kết quả: `X-Relay-Cache: miss|hit|bypass|would-hit`, `X-Relay-Policy-Mode`, `X-Relay-Policy-Revision`. Hit thêm `X-Relay-Upstream-Requests: 0`, `X-Relay-Billable-Tokens: 0`, `X-Relay-Usage-Source: local-cache`. Miss giữ nguyên usage relay trả về; 9router không cộng buffer 2.000 token hay ước lượng bù usage cho provider này. Usage của relay chưa phải số liệu hóa đơn/percentage quota được xác minh trực tiếp từ upstream.
 
-`X-Relay-Local-Only: 1` chỉ chấp nhận model có prefix `cx/`, `codex/`, `chr/`, `ch-relay/`, `ag/` hoặc `antigravity/`, không chấp nhận combo/alias tổng quát để tránh fallback ra provider khác. Miss trả 412; Antigravity luôn trả 412 vì không có response cache; kill=block trả 503. Không làm khóa hoặc xoay account khi bị policy chặn tại local.
+`X-Relay-Local-Only: 1` chỉ chấp nhận model có prefix `cx/`, `codex/`, `chr/`, `ch-relay/`, `ag/` hoặc `antigravity/`, không chấp nhận combo/alias tổng quát để tránh fallback ra provider khác. Miss trả 412; kill=block trả 503. Không làm khóa hoặc xoay account khi bị policy chặn tại local.
 
 Request có tools, tool history, encrypted reasoning, ảnh/audio, previous_response_id, conversation, store=true, background hoặc trường chưa biết sẽ không cache câu trả lời. Không cache lỗi, refusal, stream bị ngắt hoặc response chưa hoàn tất. Hai cold miss đồng thời vẫn có thể gọi upstream hai lần. Các phiên coding dùng tools thường không có response-cache hit; không có cam kết miễn token hay tăng quota tài khoản.
 
@@ -103,7 +105,8 @@ File được đọc lại trước mỗi request và mỗi 100 ms khi đang x�
 - Kill nóng: đặt `killSwitch: "block"` trong JSON hoặc tạo file `KILL_SWITCH` cạnh JSON với nội dung `block`. Đặt `bypass` để tạm bỏ optimizer/cache nhưng vẫn gọi relay. Biến `CH_RELAY_POLICY_KILL=block|bypass` áp dụng khi khởi động process và có ưu tiên cao hơn file. Không hủy được token upstream đã xử lý trước khi abort tới nơi.
 - Prompt cache: `promptCache.enabled=true`, thêm đúng model vào `promptCache.models`; request cần scope. Không ghi đè key caller. Key tự tạo ổn định trong một process, đổi sau restart vì HMAC secret chỉ nằm trong RAM.
 - Cắt tool output: `context.maxToolOutputChars` từ 256 trở lên và header `X-Relay-Context: truncate-tool-output`. Có marker rõ ràng và giữ đầu/cuối.
-- Antigravity: tùy chọn context trên áp dụng cho text trong `request.contents[].parts[].functionResponse.response`. Giữ nguyên generationConfig/thinkingConfig; reasoning và promptCache trong policy vẫn chỉ dành cho wire OpenAI. RTK là bộ nén riêng, bật/tắt trong settings 9router; `mode: off` của policy không tắt RTK.
+- Antigravity: tùy chọn context trên áp dụng cho text trong `request.contents[].parts[].functionResponse.response`. Thinking native cấu hình bằng `reasoning.antigravityModels[model]`, với `field: "thinkingBudget"` hoặc `"thinkingLevel"`, `defaultValue`, `maxValue` và `allowExplicitDowngrade`. Level cần danh sách `supported` theo thứ tự tăng dần. Không tự quy đổi giữa level và budget. Hạ giá trị caller chọn cần cả `allowExplicitDowngrade: true` lẫn `X-Relay-Reasoning: allow-downgrade`. Mặc định không có rule, giữ nguyên thinking của caller; ví dụ trong [hướng dẫn Antigravity](docs/ANTIGRAVITY_PARITY.md).
+- `promptCache` chỉ thêm key trên wire OpenAI. Google giữ session/prefix native hiện có; không gửi `prompt_cache_key` hoặc tự tạo resource `cachedContent`. RTK là bộ nén riêng, bật/tắt trong settings 9router; `mode: off` của policy không tắt RTK.
 - Effort: cấu hình `reasoning.models[model]` với `supported`, `defaultEffort` hoặc `maxEffort`. Giảm effort caller đã chọn cần `allowExplicitDowngrade: true` và `X-Relay-Reasoning: allow-downgrade`.
 - `X-9Router-Token-Saver: off` bỏ cache/optimizer mới cho request đó, vẫn tôn trọng local-only và kill switch.
 - `Cache-Control: no-store` hoặc `X-Relay-Cache: bypass` bỏ response cache. Module tích hợp không ghi audit chứa prompt/credential ra đĩa.

@@ -57,6 +57,22 @@ describe("Antigravity relay through chatCore with Google OAuth refresh", () => {
     expect(JSON.stringify(options)).not.toContain("google-refresh");
   });
 
+  it.each([false, true])("returns a native local replay as OpenAI with zero usage through chatCore (stream=%s)", async stream => {
+    const requestBody = { model: "ag/gemini-2.5-flash", stream, messages: [{ role: "user", content: "Reply GOOGLE_RELAY_OK" }], ...(stream ? { stream_options: { include_usage: true } } : {}) };
+    const raw = { endpoint: "/v1/chat/completions", body: requestBody, headers: { authorization: "Bearer router-key", "x-relay-cache": "allow", "x-relay-cache-scope": "chat-core-fixture", "x-session-id": "static-session" } };
+    const cold = await call(stream, { body: requestBody, clientRawRequest: raw });
+    expect(await cold.response.text()).toContain('"total_tokens":14');
+    const warm = await call(stream, { body: requestBody, clientRawRequest: { ...raw, headers: { ...raw.headers, "x-relay-local-only": "1" } } });
+    expect(warm.response.status).toBe(200);
+    expect(warm.response.headers.get("x-relay-cache")).toBe("hit");
+    expect(warm.response.headers.get("x-relay-upstream-requests")).toBe("0");
+    const text = await warm.response.text();
+    expect(text).toContain("GOOGLE_RELAY_OK");
+    expect(text).toContain('"total_tokens":0');
+    expect(text).not.toContain('"estimated":true');
+    expect(state.fetch).toHaveBeenCalledOnce();
+  });
+
   it.each([401, 403])("refreshes after Google HTTP %s and retries the relay with the new token", async status => {
     state.fetch.mockImplementationOnce(async () => Response.json({ error: { message: "Expired Google token" } }, { status }));
     const refreshFetch = vi.spyOn(proxyTransport, "proxyAwareFetch").mockImplementation(async (url, options) => {

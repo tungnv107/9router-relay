@@ -65,7 +65,8 @@ describe("ch-relay through real chatCore and translators", () => {
     expect(hit.response.headers.get("x-relay-cache")).toBe("hit");
     const replay = await hit.response.text();
     expect(replay).toContain('"total_tokens":0');
-    expect(replay).not.toContain("2000");
+    const replayUsage = replay.split("\n").filter(line => line.startsWith("data: {")).map(line => JSON.parse(line.slice(6))).find(chunk => chunk.usage)?.usage;
+    expect(replayUsage).toMatchObject({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
     expect(state.fetch).toHaveBeenCalledTimes(1);
   });
 

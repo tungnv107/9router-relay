@@ -2,7 +2,8 @@ import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { defaults, validateConfig, revisionOf } from './config.mjs';
 import { optimize } from './optimizer.mjs';
 import { inspectReplay, replayBytes } from './replay.mjs';
-import { antigravityRelayTarget } from '../../../config/antigravityRelay.mjs';
+import { antigravityRelayTarget, isAntigravityEndpoint } from '../../../config/antigravityRelay.mjs';
+import { antigravityEligibility, antigravityCacheBody } from './antigravity.mjs';
 
 const endpoints=new Set(['/v1/responses','/v1/chat/completions']);
 const hop=new Set(['connection','keep-alive','transfer-encoding','content-length','host','proxy-authorization','proxy-authenticate','upgrade','trailer','te']);
@@ -29,9 +30,7 @@ function authDeadline(headers, now) {
   } catch { return 0; }
 }
 function eligibility(body, headers, endpoint, config, now) {
-  // Native Google optimization is supported, but replaying a Google response
-  // (including signed thinking/tool state) is deliberately not a cache feature.
-  if (!endpoints.has(endpoint)) return 'native_response_cache_unsupported';
+  if (!endpoints.has(endpoint) && !isAntigravityEndpoint(endpoint)) return 'native_response_cache_unsupported';
   if (!config.cache.enabled) return 'cache_disabled';
   if (headers.get('x-relay-cache')==='bypass' || /no-store|no-cache/i.test(headers.get('cache-control')??'')) return 'client_bypass';
   if (config.cache.requireOptIn && headers.get('x-relay-cache')!=='allow') return 'opt_in_required';
@@ -39,6 +38,7 @@ function eligibility(body, headers, endpoint, config, now) {
   if (!authDeadline(headers,now)) return 'credential_missing_or_expired';
   if (!body || typeof body!=='object' || Array.isArray(body) || typeof body.model!=='string' || !body.model) return 'invalid_body';
   if (headers.has('cookie') || headers.has('idempotency-key')) return 'stateful_header';
+  if (isAntigravityEndpoint(endpoint)) return antigravityEligibility(body);
   if (body.store===true || body.background || body.previous_response_id || body.conversation || body.tools?.length || body.include?.length || body.audio || body.modalities || body.prediction) return 'tools_or_state';
   const common=['model','stream','store','temperature','top_p','seed','metadata','user','service_tier','prompt_cache_key','prompt_cache_retention','prompt_cache_options'];
   const allowed=new Set([...common,...(endpoint==='/v1/responses' ? ['input','instructions','tools','tool_choice','parallel_tool_calls','reasoning','text','max_output_tokens','truncation','include'] : ['messages','tools','tool_choice','parallel_tool_calls','reasoning_effort','response_format','max_tokens','max_completion_tokens','stream_options','n','presence_penalty','frequency_penalty','logit_bias','logprobs','top_logprobs'])]);
@@ -134,7 +134,8 @@ export class PolicyEngine {
     const proposal=request.headers.get('x-relay-optimizer')==='off' ? {body,changes:[]} : optimize(body,request.headers,config,this.secret,endpoint);
     const reason=eligibility(body,request.headers,endpoint,config,this.now());
     const digestHeaders=[...request.headers].filter(([key])=>!hop.has(key) && key!=='x-relay-local-only').sort(([a],[b])=>a.localeCompare(b));
-    const key=reason ? null : createHmac('sha256',this.secret).update(JSON.stringify([this.revision,request.url,digestHeaders])).update(raw).digest('hex');
+    const cacheBody=isAntigravityEndpoint(endpoint) ? antigravityCacheBody(body) : raw;
+    const key=reason ? null : createHmac('sha256',this.secret).update(JSON.stringify([this.revision,request.url,digestHeaders])).update(cacheBody).digest('hex');
     const entry=key ? this.get(key) : null;
     if (entry && config.mode==='enforce') {
       this.counters.local_hits++;event('local_hit',{upstream_requests:0,billable_tokens:0,original_usage:entry.replay.originalUsage});

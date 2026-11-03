@@ -1,5 +1,15 @@
 # Kết quả tích hợp ch-relay — 02/11/2026
 
+## Bổ sung native Antigravity cache/thinking — 03/11/2026
+
+- 280 kiểm thử PASS: 105 policy, 140 relay/provider/chatCore, 35 hồi quy. 9 ca E2E RTK có cờ tích hợp riêng không được bật; không tính vào số PASS.
+- HTTP localhost kiểm tra Gemini và Claude native JSON/SSE: cold gọi Google fixture 1 lần, replay 0 lần, usage replay 0; phân tách caller và bảo toàn no-store/opt-out đều PASS.
+- Bundle Bun ch-relay thật với profile tạm/Google fixture: PASS; JSON và SSE cold mỗi loại 1 call, replay mỗi loại 0 call. Tổng 5 call tổng hợp gồm 3 ca baseline. Không gọi tài khoản Google thật.
+- Native thinkingBudget/thinkingLevel theo model: defaults/caps/opt-in, dry-run/off, bảo toàn includeThoughts/maxOutputTokens và state PASS.
+- Production build PASS (151 static pages), ESLint file thay đổi và diff whitespace PASS. Bundle local đã đóng gói lại; chưa deploy/push.
+- Sửa một assertion cũ kiểm tra chuỗi `2000` trên toàn SSE gây false positive khi ID ngẫu nhiên chứa chuỗi này; nay kiểm tra các trường usage bằng số.
+- [Cấu hình và giới hạn](../../docs/ANTIGRAVITY_PARITY.md). Log `.scratch/antigravity-parity-*.log`; report `.scratch/antigravity-backend-report.json`.
+
 Mã gốc: 9router `v0.5.112`, commit `1fe586bb1cf35e1ed0cb2150a8ef7d1db040b21d`. Môi trường kiểm chứng: Windows, Node `24.18.0`, Next.js `16.4.3` (được npm resolve từ khai báo upstream `^16.4.2`).
 
 ## Kiểm chứng bản cuối
