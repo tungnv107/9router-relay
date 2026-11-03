@@ -28,6 +28,17 @@ function validationError(message = "Request validation failed") {
 }
 
 describe("combo fallback — request-scoped 4xx from a member", () => {
+  it("advances past a missing Antigravity model without locking its account", async () => {
+    const handleSingleModel = vi.fn(async (_body, model) => model === "ag/retired-model"
+      ? jsonResponse({ error: { message: "Requested entity was not found.", status: "NOT_FOUND" } }, 404)
+      : jsonResponse({ choices: [{ message: { content: "OK" } }] }));
+    const result = await handleComboChat({
+      body: { messages: [{ role: "user", content: "hi" }] },
+      models: ["ag/retired-model", "ag/live-model"], handleSingleModel, log: silentLog, comboStrategy: "fallback",
+    });
+    expect(result.status).toBe(200);
+    expect(handleSingleModel.mock.calls.map(([, model]) => model)).toEqual(["ag/retired-model", "ag/live-model"]);
+  });
   it("flags a generic 400 as request-scoped without cooling the account", () => {
     expect(checkFallbackError(400, "Request validation failed")).toEqual({
       shouldFallback: false,

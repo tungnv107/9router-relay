@@ -18,6 +18,7 @@ import { resolveClinepassModels, resolveClineModels } from "open-sse/services/cl
 import { resolveGrokCliModels } from "open-sse/services/grokCliModels.js";
 import { resolveCursorModels } from "open-sse/services/cursorModels.js";
 import { resolveZedModels } from "open-sse/shared/zedAuth.js";
+import { resolveAntigravityModels } from "open-sse/services/antigravityModels.js";
 import { updateProviderCredentials } from "@/sse/services/tokenRefresh";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { capabilitiesFromServiceKind, getCapabilitiesForModel, aggregateComboCapabilities } from "open-sse/providers/capabilities.js";
@@ -63,6 +64,9 @@ function comboSeatCapabilities(seat) {
 // returns { models: [{ id, name? }, ...] } | null on failure.
 // Adding a provider here makes /v1/models prefer the live catalog for it.
 const LIVE_MODEL_RESOLVERS = {
+  antigravity: conn => resolveAntigravityModels(conn, {
+    onCredentialsRefreshed: refreshed => updateProviderCredentials(conn.id, refreshed),
+  }),
   kiro: async (conn) => {
     const result = await resolveKiroModels({
       accessToken: conn.accessToken,
@@ -457,6 +461,12 @@ export async function buildModelsList(kindFilter, options = {}) {
       const enabledModels = conn?.providerSpecificData?.enabledModels;
       const hasExplicitEnabledModels =
         Array.isArray(enabledModels) && enabledModels.length > 0;
+      const enabledAntigravityIds = providerId === "antigravity" && hasExplicitEnabledModels
+        ? new Set(enabledModels.filter(id => typeof id === "string").map(id => {
+            const prefix = [outputAlias, staticAlias, providerId].find(alias => id.startsWith(`${alias}/`));
+            return prefix ? id.slice(prefix.length + 1) : id;
+          }))
+        : null;
       const isCompatibleProvider =
         isOpenAICompatibleProvider(providerId) || isAnthropicCompatibleProvider(providerId);
 
@@ -477,6 +487,10 @@ export async function buildModelsList(kindFilter, options = {}) {
           )
         : providerModels.map((model) => model.id);
 
+      // Antigravity's static registry contains historical/unreleased model IDs.
+      // Do not advertise them when account discovery is empty or unavailable.
+      if (providerId === "antigravity") rawModelIds = [];
+
       if (isCompatibleProvider && rawModelIds.length === 0 && !skipDynamicFetch) {
         rawModelIds = await fetchCompatibleModelIds(conn);
       }
@@ -485,11 +499,12 @@ export async function buildModelsList(kindFilter, options = {}) {
       // -thinking/-agentic variants per account). On failure, fall back to
       // whatever rawModelIds already holds.
       const liveResolver = LIVE_MODEL_RESOLVERS[providerId];
-      if (liveResolver && !hasExplicitEnabledModels) {
+      if (liveResolver && (!hasExplicitEnabledModels || providerId === "antigravity")) {
         try {
           const live = await liveResolver(conn);
           if (live?.models?.length) {
-            rawModelIds = live.models.map((m) => m.id);
+            rawModelIds = live.models.map((m) => m.id).filter(id =>
+              !enabledAntigravityIds || enabledAntigravityIds.has(id));
             liveModelKindById = new Map(
               live.models
                 .filter((m) => m?.id)

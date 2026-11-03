@@ -163,7 +163,7 @@ export default function ProviderDetailPage() {
   const supportsApiKeyAuth = !!APIKEY_PROVIDERS[providerId] || authModes.includes("apikey");
   const isFreeNoAuth = !!FREE_PROVIDERS[providerId]?.noAuth;
   const staticModels = getModelsByProviderId(providerId);
-  const models = (providerId === "cursor" || providerId === "zed" || providerId === "ch-relay") && liveModels.length > 0
+  const models = providerId === "antigravity" ? liveModels : (providerId === "cursor" || providerId === "zed" || providerId === "ch-relay") && liveModels.length > 0
     ? liveModels
     : staticModels;
   const providerAlias = getProviderAlias(providerId);
@@ -486,8 +486,8 @@ export default function ProviderDetailPage() {
   // the provider id or connection list changes — no polling, no loop.
   // Cursor path is statement-identical to before; zed adds error surfacing.
   useEffect(() => {
-    const isLiveCatalog = providerId === "cursor" || providerId === "zed" || providerId === "ch-relay";
-    const showCatalogError = providerId === "zed" || providerId === "ch-relay";
+    const isLiveCatalog = providerId === "cursor" || providerId === "zed" || providerId === "ch-relay" || providerId === "antigravity";
+    const showCatalogError = providerId === "zed" || providerId === "ch-relay" || providerId === "antigravity";
     if (!isLiveCatalog) {
       setLiveModels([]);
       return;
@@ -1865,7 +1865,7 @@ export default function ProviderDetailPage() {
             })()}
           </div>
         )}
-        {(providerId === "zed" || providerId === "ch-relay") && !!liveModelsError && (
+        {(providerId === "zed" || providerId === "ch-relay" || providerId === "antigravity") && !!liveModelsError && (
           <p className="text-xs text-red-500 mb-3 break-words">{liveModelsError}</p>
         )}
         {renderModelsSection()}

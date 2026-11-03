@@ -27,6 +27,11 @@ export function getQuotaCooldown(backoffLevel = 0) {
  * this request, so combo rotation must still try the next member.
  */
 export function checkFallbackError(status, errorText, backoffLevel = 0, provider = null) {
+  // A missing Google model/project is a request failure, not evidence that the
+  // OAuth credential is bad. Let combos try another model without cooling the account.
+  if (provider === "antigravity" && status === 404) {
+    return { shouldFallback: false, cooldownMs: 0, requestScoped: true };
+  }
   const lowerError = errorText
     ? (typeof errorText === "string" ? errorText : JSON.stringify(errorText)).toLowerCase()
     : "";

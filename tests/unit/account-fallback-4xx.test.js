@@ -7,6 +7,13 @@ import { describe, expect, it } from "vitest";
 import { checkFallbackError } from "../../open-sse/services/accountFallback.js";
 
 describe("checkFallbackError — request-scoped vs account-scoped failures", () => {
+  it("does not lock an Antigravity account for a missing model", () => {
+    expect(checkFallbackError(404, '{"error":{"status":"NOT_FOUND","message":"Requested entity was not found."}}', 0, "antigravity"))
+      .toEqual({ shouldFallback: false, cooldownMs: 0, requestScoped: true });
+    for (const status of [401, 403, 429]) {
+      expect(checkFallbackError(status, "nope", 0, "antigravity").shouldFallback).toBe(true);
+    }
+  });
   it("does not cool the account down for a 400 caused by the request", () => {
     const result = checkFallbackError(400, JSON.stringify({
       error: {

@@ -4,6 +4,8 @@ import { getProviderModels, PROVIDER_ID_TO_ALIAS } from "open-sse/config/provide
 import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider } from "@/shared/constants/providers";
 import { UPDATER_CONFIG } from "@/shared/constants/config";
 import { pingModelByKind } from "@/app/api/models/test/ping";
+import { resolveAntigravityModels } from "open-sse/services/antigravityModels.js";
+import { updateProviderCredentials } from "@/sse/services/tokenRefresh";
 
 /**
  * POST /api/providers/[id]/test-models
@@ -23,6 +25,14 @@ export async function POST(request, { params }) {
     const alias = PROVIDER_ID_TO_ALIAS[providerId] || providerId;
 
     let models = getProviderModels(alias);
+
+    if (providerId === "antigravity") {
+      const catalog = await resolveAntigravityModels(connection, {
+        onCredentialsRefreshed: refreshed => updateProviderCredentials(id, refreshed),
+      });
+      if (catalog.error) return NextResponse.json({ error: catalog.error }, { status: catalog.status || 502 });
+      models = catalog.models;
+    }
 
     const baseUrl = `http://127.0.0.1:${process.env.PORT || UPDATER_CONFIG.appPort}`;
 
